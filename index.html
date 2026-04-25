@@ -1,0 +1,2442 @@
+<!-- Stream Transect Simulator -->
+<style>
+  :root {
+    --paper: #f0e8d6;
+    --paper-2: #e8dec5;
+    --paper-shadow: #d4c8a8;
+    --ink: #2a2418;
+    --ink-soft: #5a4f38;
+    --ink-faint: #8a7e60;
+    --water: #6b8c9e;
+    --water-2: #4a6878;
+    --water-deep: #2c4654;
+    --bank: #a89070;
+    --bank-2: #876e4e;
+    --grass: #6b7d4a;
+    --grass-2: #4d5e34;
+    --rust: #b4471f;
+    --rust-soft: #c46943;
+    --gold: #c08a2a;
+    --pool: #4a6878;
+    --riffle: #c46943;
+    --run: #8aa66e;
+    --green-ok: #4a7d3d;
+    --red-bad: #a83a2c;
+  }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Newsreader', 'Iowan Old Style', 'Palatino', 'Book Antiqua', Georgia, serif;
+    background:
+      radial-gradient(ellipse at 20% 10%, rgba(0,0,0,0.06), transparent 60%),
+      radial-gradient(ellipse at 80% 90%, rgba(0,0,0,0.08), transparent 60%),
+      var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    background-attachment: fixed;
+  }
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.16  0 0 0 0 0.14  0 0 0 0 0.09  0 0 0 0.10 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    pointer-events: none;
+    opacity: 0.6;
+    z-index: 0;
+    mix-blend-mode: multiply;
+  }
+  #app { position: relative; z-index: 1; }
+  .display { font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif; font-weight: 600; letter-spacing: -0.01em; }
+  .hand { font-family: 'Caveat', 'Bradley Hand', 'Comic Sans MS', cursive; }
+  .mono { font-family: 'JetBrains Mono', 'Courier Prime', 'Courier New', monospace; }
+  button { font-family: inherit; cursor: pointer; }
+  /* Subtle paper "fold" shadow on cards */
+  .panel {
+    background: linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%);
+    border: 1px solid var(--paper-shadow);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.5) inset,
+      0 2px 8px rgba(40,30,10,0.08),
+      0 12px 24px rgba(40,30,10,0.06);
+  }
+
+  /* Hand-drawn link decoration */
+  .underline-wavy {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 8' width='60' height='8'><path d='M0 4 Q 7.5 0 15 4 T 30 4 T 45 4 T 60 4' stroke='%23b4471f' stroke-width='1.6' fill='none'/></svg>");
+    background-repeat: repeat-x;
+    background-position: 0 95%;
+    background-size: 60px 8px;
+    padding-bottom: 4px;
+  }
+
+  /* The "stamp" headers */
+  .stamp {
+    display: inline-block;
+    border: 2px solid var(--rust);
+    color: var(--rust);
+    padding: 4px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 11px;
+    transform: rotate(-1.5deg);
+    background: rgba(250, 240, 220, 0.4);
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 10px 20px;
+    border: 1.5px solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    transition: all 0.15s;
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+  .btn:hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+  .btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: 1px 1px 0 var(--ink); }
+  .btn-primary { background: var(--rust); color: var(--paper); border-color: var(--rust); box-shadow: 3px 3px 0 var(--ink); }
+  .btn-primary:hover:not(:disabled) { background: var(--rust-soft); }
+  .btn-ghost { border-style: dashed; box-shadow: none; }
+  .btn-ghost:hover:not(:disabled) { box-shadow: 2px 2px 0 var(--ink); }
+
+  /* Tooltips and tags */
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px solid currentColor;
+  }
+
+  /* Toast messages */
+  .toast-stack {
+    position: fixed; top: 24px; right: 24px; z-index: 100;
+    display: flex; flex-direction: column; gap: 8px;
+    pointer-events: none;
+  }
+  .toast {
+    background: var(--paper);
+    border: 1.5px solid var(--ink);
+    box-shadow: 3px 3px 0 var(--ink);
+    padding: 10px 16px;
+    max-width: 320px;
+    font-size: 14px;
+    animation: toast-in 0.3s ease-out;
+  }
+  .toast.ok { border-color: var(--green-ok); border-left-width: 6px; }
+  .toast.bad { border-color: var(--red-bad); border-left-width: 6px; }
+  .toast.info { border-color: var(--gold); border-left-width: 6px; }
+  @keyframes toast-in {
+    from { transform: translateX(40px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  /* SVG cursors */
+  .cursor-tape { cursor: crosshair; }
+  .cursor-pin { cursor: pointer; }
+  .cursor-rod { cursor: ns-resize; }
+
+  /* Form inputs */
+  input[type="number"], input[type="text"], select {
+    font-family: 'JetBrains Mono', monospace;
+    background: rgba(255,250,240,0.7);
+    border: 1px solid var(--ink-faint);
+    border-bottom: 2px solid var(--ink);
+    padding: 6px 10px;
+    font-size: 13px;
+    color: var(--ink);
+    width: 100px;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--rust); }
+
+  /* small hover state */
+  .hover-lift { transition: transform 0.15s; }
+  .hover-lift:hover { transform: translateY(-2px); }
+
+  /* Animation */
+  @keyframes fadein { from { opacity: 0; transform: translateY(8px);} to {opacity:1; transform: translateY(0);} }
+  .fadein { animation: fadein 0.4s ease-out; }
+  @keyframes ripple {
+    0% { r: 0; opacity: 0.6; }
+    100% { r: 30; opacity: 0; }
+  }
+  .ripple { animation: ripple 0.7s ease-out forwards; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--paper-2); }
+  ::-webkit-scrollbar-thumb { background: var(--ink-soft); border: 2px solid var(--paper-2); }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Newsreader:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Caveat:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<div id="app"></div>
+<div class="toast-stack" id="toasts"></div>
+
+<script>
+// =====================================================================
+// RIFFLE RUN
+// A multi-stage interactive teaching tool for stream habitat assessment
+// =====================================================================
+
+// ---------- TOAST SYSTEM ----------
+const toastEl = document.getElementById('toasts');
+function toast(msg, kind = 'info', ms = 3500) {
+  const el = document.createElement('div');
+  el.className = `toast ${kind}`;
+  el.innerHTML = msg;
+  toastEl.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 350); }, ms);
+}
+
+// ---------- APP STATE ----------
+const state = {
+  stage: 'intro',  // intro | layout | crosssection | units | substrate | undercut | summary
+  // Layout stage
+  bankfullMeasurements: [],   // 5 measurements
+  widthCategory: null,        // e.g. 6, 8, 10, 12...
+  transectsPlaced: 0,         // 0..11
+  transectsLocked: false,
+  // Cross section stage
+  csTransect: 1,
+  csMeasurements: [],         // [{x_real, bf_depth, w_depth}]
+  csComplete: false,
+  // Channel units stage
+  unitBoundaries: [0, 1.0],   // normalized along reach (0 = BOS, 1 = TOS)
+  unitClassifications: [],    // per segment: 'pool' | 'riffle' | 'run' | null
+  unitsComplete: false,
+  // Substrate stage
+  substrateCrossSections: [], // which units chosen
+  substratePicks: [],         // [{unit, point, size, embed_buried, embed_fines}]
+  substrateComplete: false,
+  // Undercut bank stage
+  undercutDecisions: [],      // for each of N candidate banks, qualify Y/N + measurements
+  undercutComplete: false,
+  // Score
+  score: { layout: 0, crosssection: 0, units: 0, substrate: 0, undercut: 0 },
+  scoreNotes: { layout: [], crosssection: [], units: [], substrate: [], undercut: [] },
+};
+
+// ---------- THE STREAM (synthetic but plausible) ----------
+// We model a stream reach with a centerline that meanders, and bank lines.
+// Lengths are in real meters. The "true" bankfull width varies along the reach.
+const STREAM = (() => {
+  // 110m reach, varying width 5-9m, sinuous
+  const len = 110;
+  const samples = [];
+  for (let s = 0; s <= len; s += 0.5) {
+    // centerline lateral offset: sum of two sines
+    const lat = 6 * Math.sin(s * 0.06) + 2.5 * Math.sin(s * 0.16 + 1.2);
+    // bankfull width (varies along channel realistically)
+    const bfw = 7.0 + 1.5 * Math.sin(s * 0.05 + 0.4) + 0.8 * Math.sin(s * 0.18);
+    samples.push({ s, lat, bfw });
+  }
+  return { len, samples };
+})();
+
+// True average bankfull at the bottom of site (first 5 widths spaced equally)
+function trueBankfullAt(s) {
+  // Linear interpolation
+  const i = Math.min(STREAM.samples.length - 2, Math.max(0, Math.floor(s * 2)));
+  const a = STREAM.samples[i], b = STREAM.samples[i+1];
+  const t = (s - a.s) / (b.s - a.s);
+  return a.bfw + (b.bfw - a.bfw) * t;
+}
+function centerlineAt(s) {
+  const i = Math.min(STREAM.samples.length - 2, Math.max(0, Math.floor(s * 2)));
+  const a = STREAM.samples[i], b = STREAM.samples[i+1];
+  const t = (s - a.s) / (b.s - a.s);
+  return a.lat + (b.lat - a.lat) * t;
+}
+
+// =====================================================================
+// RENDER FRAMEWORK (vanilla, render-on-state-change)
+// =====================================================================
+const root = document.getElementById('app');
+function render() {
+  root.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'max-width: 1180px; margin: 0 auto; padding: 32px 28px 40px;';
+  wrap.appendChild(renderHeader());
+  wrap.appendChild(renderStage());
+  wrap.appendChild(renderFooter());
+  root.appendChild(wrap);
+}
+
+function renderFooter() {
+  const f = document.createElement('footer');
+  f.style.cssText = 'margin-top: 60px; padding-top: 22px; border-top: 1px dashed var(--ink-faint); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;';
+  f.innerHTML = `
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint);">
+      Riffle Run · v 1.0
+    </div>
+    <div class="hand" style="font-size: 18px; color: var(--rust); transform: rotate(-1deg);">
+      Created by Michael Stocklin · 2026
+    </div>
+  `;
+  return f;
+}
+
+// ---------- HEADER ----------
+function renderHeader() {
+  const h = document.createElement('header');
+  h.style.cssText = 'margin-bottom: 32px; position: relative;';
+
+  const stages = [
+    { key: 'intro', label: 'Intro', n: 0 },
+    { key: 'layout', label: 'Site Layout', n: 1 },
+    { key: 'crosssection', label: 'Cross Section', n: 2 },
+    { key: 'units', label: 'Channel Units', n: 3 },
+    { key: 'substrate', label: 'Substrate', n: 4 },
+    { key: 'undercut', label: 'Undercut Banks', n: 5 },
+    { key: 'summary', label: 'Field Report', n: 6 },
+  ];
+
+  h.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap;">
+      <div>
+        <h1 class="display" style="font-size: clamp(48px, 8vw, 96px); margin: 0; line-height: 0.9; font-weight: 600;">
+          Riffle
+          <span style="display: inline-block; transform: rotate(-2deg); color: var(--rust);">Run</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.28em; font-weight: 400; color: var(--ink-faint); letter-spacing: 0.05em; vertical-align: 0.9em; margin-left: -0.15em;">1.0</span>
+        </h1>
+        <p style="font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 18px; color: var(--ink-soft); margin: 10px 0 0; max-width: 640px;">
+          A field-skills trainer for stream habitat assessment — site layout, cross sections, channel units, substrate, and undercut banks.
+        </p>
+      </div>
+      <div class="hand" style="font-size: 22px; color: var(--rust); transform: rotate(2deg); text-align: right;">
+        <div>${formatToday()}</div>
+        <div style="font-size: 14px; color: var(--ink-faint);">crew: you, solo</div>
+        <button onclick="window.__openGlossary()" class="btn btn-ghost" style="margin-top: 10px; font-size: 10px; padding: 4px 10px; transform: rotate(-2deg);">📖 Glossary</button>
+      </div>
+    </div>
+    <div style="display: flex; gap: 0; margin-top: 28px; border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink); padding: 8px 0; flex-wrap: wrap;">
+      ${stages.map((s, i) => {
+        const active = s.key === state.stage;
+        const past = stages.findIndex(x => x.key === state.stage) > i;
+        const clickable = past || active || s.key === 'intro';
+        return `<div onclick="${clickable ? `goStage('${s.key}')` : ''}" style="flex: 1; min-width: 120px; padding: 6px 10px; border-right: ${i < stages.length-1 ? '1px dashed var(--ink-faint)' : 'none'};
+                            ${active ? `background: var(--ink); color: var(--paper);` : ''}
+                            font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+                            text-align: center; opacity: ${past || active ? 1 : 0.5};
+                            cursor: ${clickable ? 'pointer' : 'default'};
+                            transition: background 0.15s;"
+              ${clickable && !active ? `onmouseover="this.style.background='var(--paper-shadow)'" onmouseout="this.style.background=''"` : ''}>
+          <div style="font-size: 9px; opacity: 0.7;">${s.n.toString().padStart(2,'0')}</div>
+          ${s.label}
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+  return h;
+}
+
+function formatToday() {
+  const d = new Date();
+  const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  return `${d.getDate().toString().padStart(2,'0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// =====================================================================
+// STAGE: INTRO
+// =====================================================================
+function renderStage() {
+  const c = document.createElement('div');
+  c.className = 'fadein';
+  switch (state.stage) {
+    case 'intro': c.appendChild(stageIntro()); break;
+    case 'layout': c.appendChild(stageLayout()); break;
+    case 'crosssection': c.appendChild(stageCrossSection()); break;
+    case 'units': c.appendChild(stageUnits()); break;
+    case 'substrate': c.appendChild(stageSubstrate()); break;
+    case 'undercut': c.appendChild(stageUndercut()); break;
+    case 'summary': c.appendChild(stageSummary()); break;
+  }
+  return c;
+}
+
+function stageIntro() {
+  const el = document.createElement('div');
+  el.innerHTML = `
+    <div class="panel" style="padding: 36px; margin-bottom: 24px; display: grid; grid-template-columns: 1.3fr 1fr; gap: 32px; align-items: center;">
+      <div>
+        <h2 class="display" style="font-size: 36px; margin: 0 0 16px; line-height: 1.1;">Welcome to <span style="color: var(--rust);">Coyote Creek</span>.</h2>
+        <p style="font-size: 16px; line-height: 1.65; color: var(--ink-soft); margin-bottom: 16px;">
+          You're a field tech assigned to assess a 110-meter stretch of stream for fish habitat.
+          Across five stages, you'll learn the methodology biologists use across the Pacific Northwest:
+          how to lay out a site, take cross sections, identify channel units, sample substrate, and qualify undercut banks.
+        </p>
+        <p style="font-size: 15px; color: var(--ink-faint); font-style: italic; border-left: 3px solid var(--rust); padding-left: 14px; margin: 18px 0;">
+          Each stage gives feedback. You don't have to be perfect — biologists rarely are on the first try. The point is to learn what each measurement is sensitive to, and why the protocol asks for it the way it does.
+        </p>
+        <div style="display: flex; gap: 10px; align-items: center; margin-top: 22px;">
+          <button class="btn btn-primary" onclick="goStage('layout')">Begin fieldwork →</button>
+          <button class="btn btn-ghost" onclick="window.__openGlossary()">📖 Glossary first</button>
+        </div>
+      </div>
+      <div style="position: relative;">
+        ${introIllustrationSVG()}
+        <div class="hand" style="position: absolute; bottom: -20px; right: 0; font-size: 22px; color: var(--rust); transform: rotate(-3deg);">
+          ← study the reach<br/>before going in
+        </div>
+      </div>
+    </div>
+
+    <h3 class="display" style="font-size: 22px; margin: 28px 0 14px;">What you'll do</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;">
+      ${[
+        { n: '01', name: 'Site Layout', tag: 'top-down map', desc: 'Find bankfull, average 5 widths, place 11 transects.', icon: stageIcon('layout') },
+        { n: '02', name: 'Cross Section', tag: 'side view', desc: 'Drop the depth rod at 11 horizontal points across the channel.', icon: stageIcon('xs') },
+        { n: '03', name: 'Channel Units', tag: 'longitudinal profile', desc: 'Identify and classify pools, riffles, and runs along the reach.', icon: stageIcon('units') },
+        { n: '04', name: 'Substrate', tag: 'gravelometer', desc: 'Place 6 cross-sections in riffles; classify particles; estimate embeddedness.', icon: stageIcon('substrate') },
+        { n: '05', name: 'Undercut Banks', tag: 'qualification', desc: 'Apply the criteria: depth, length, ceiling, cover.', icon: stageIcon('undercut') },
+      ].map(s => `
+        <div class="panel hover-lift" style="padding: 14px;">
+          <div style="font-family: 'JetBrains Mono'; font-size: 10px; color: var(--ink-faint); letter-spacing: 0.15em;">STAGE ${s.n}</div>
+          <div style="display: flex; gap: 10px; align-items: center; margin: 8px 0;">
+            ${s.icon}
+            <div>
+              <h4 class="display" style="margin: 0; font-size: 18px;">${s.name}</h4>
+              <div style="font-family: 'JetBrains Mono'; font-size: 9px; color: var(--rust); letter-spacing: 0.1em; text-transform: uppercase;">${s.tag}</div>
+            </div>
+          </div>
+          <p style="margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink-soft);">${s.desc}</p>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  return el;
+}
+
+// Tiny SVG icons for each stage
+function stageIcon(kind) {
+  const wrap = (inner) => `<div style="width: 44px; height: 44px; border: 1.5px solid var(--ink); background: var(--paper-2); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">${inner}</div>`;
+  switch (kind) {
+    case 'layout':
+      return wrap(`<svg viewBox="0 0 32 32" width="32" height="32"><path d="M 4 18 Q 12 12 18 16 T 28 14" stroke="#4a6878" stroke-width="2.5" fill="none"/><line x1="6" y1="10" x2="6" y2="22" stroke="#b4471f" stroke-width="1"/><line x1="14" y1="9" x2="14" y2="22" stroke="#b4471f" stroke-width="1"/><line x1="22" y1="10" x2="22" y2="22" stroke="#b4471f" stroke-width="1"/></svg>`);
+    case 'xs':
+      return wrap(`<svg viewBox="0 0 32 32" width="32" height="32"><path d="M 4 10 L 8 16 Q 16 24 24 16 L 28 10" stroke="#5a4f38" stroke-width="1.5" fill="#a89070" fill-opacity="0.4"/><line x1="6" y1="14" x2="26" y2="14" stroke="#4a6878" stroke-width="1.5" stroke-dasharray="2 2"/><circle cx="10" cy="14" r="1.5" fill="#b4471f"/><circle cx="16" cy="14" r="1.5" fill="#b4471f"/><circle cx="22" cy="14" r="1.5" fill="#b4471f"/></svg>`);
+    case 'units':
+      return wrap(`<svg viewBox="0 0 32 32" width="32" height="32"><rect x="3" y="14" width="7" height="6" fill="#c46943"/><rect x="10" y="14" width="6" height="6" fill="#8aa66e"/><rect x="16" y="14" width="6" height="6" fill="#4a6878"/><rect x="22" y="14" width="7" height="6" fill="#c46943"/></svg>`);
+    case 'substrate':
+      return wrap(`<svg viewBox="0 0 32 32" width="32" height="32"><circle cx="10" cy="20" r="4" fill="#585020"/><circle cx="20" cy="22" r="5" fill="#383812"/><circle cx="22" cy="13" r="3" fill="#786030"/><circle cx="13" cy="11" r="2" fill="#988050"/></svg>`);
+    case 'undercut':
+      return wrap(`<svg viewBox="0 0 32 32" width="32" height="32"><path d="M 0 4 L 32 4 L 32 12 L 12 12 Q 8 16 12 20 L 32 20 L 32 32 L 0 32 Z" fill="#a89070"/><line x1="0" y1="20" x2="32" y2="20" stroke="#fdfaf0" stroke-width="0.6" stroke-dasharray="1 1"/><rect x="12" y="12" width="20" height="8" fill="#4a6878" opacity="0.5"/></svg>`);
+  }
+  return wrap('');
+}
+
+function introIllustrationSVG() {
+  // Build proper banks as smooth filled polygons (one path, no string-reversing tricks)
+  const W = 460, H = 420;
+  const padX = 30, padY = 0;
+  const sToX = s => padX + s * (W - 2*padX) / STREAM.len;
+  const latToY = lat => 200 + lat * 8;
+
+  // Compute left and right bank polylines
+  const leftBank = [], rightBank = [];
+  for (let s = 0; s <= STREAM.len; s += 1) {
+    const cy = latToY(centerlineAt(s));
+    const w = trueBankfullAt(s) * 4;
+    leftBank.push([sToX(s), cy - w * 0.55]);
+    rightBank.push([sToX(s), cy + w * 0.55]);
+  }
+  // Bankfull polygon
+  const bfPath = 'M ' + leftBank.map(p => p.join(' ')).join(' L ') +
+                 ' L ' + rightBank.slice().reverse().map(p => p.join(' ')).join(' L ') + ' Z';
+  // Wetted (narrower) polygon
+  const wetLeft = leftBank.map(([x,y], i) => {
+    const cy = latToY(centerlineAt((i)));
+    return [x, y + (cy - y) * 0.42];
+  });
+  const wetRight = rightBank.map(([x,y], i) => {
+    const cy = latToY(centerlineAt((i)));
+    return [x, y + (cy - y) * 0.42];
+  });
+  const wetPath = 'M ' + wetLeft.map(p => p.join(' ')).join(' L ') +
+                  ' L ' + wetRight.slice().reverse().map(p => p.join(' ')).join(' L ') + ' Z';
+  // Centerline (thalweg)
+  const thalweg = leftBank.map((_, i) => `${sToX(i)} ${latToY(centerlineAt(i))}`).join(' L ');
+
+  return `
+  <svg viewBox="0 0 ${W} ${H}" style="width:100%; height:auto; background: linear-gradient(135deg, #e8d9b4, #d4c094); border: 1.5px solid var(--ink); box-shadow: 6px 6px 0 var(--ink);">
+    <defs>
+      <pattern id="grass-pat" width="6" height="6" patternUnits="userSpaceOnUse">
+        <path d="M 1 5 L 1 1 M 3 5 L 3 2 M 5 5 L 5 1" stroke="#6b7d4a" stroke-width="0.6" opacity="0.5"/>
+      </pattern>
+      <linearGradient id="bf-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#a8c0d0"/>
+        <stop offset="100%" stop-color="#7a96a8"/>
+      </linearGradient>
+      <linearGradient id="wet-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#5a7e90"/>
+        <stop offset="100%" stop-color="#2c4654"/>
+      </linearGradient>
+      <filter id="paper-grain">
+        <feTurbulence baseFrequency="0.9" numOctaves="2" seed="2"/>
+        <feColorMatrix values="0 0 0 0 0.16  0 0 0 0 0.14  0 0 0 0 0.09  0 0 0 0.18 0"/>
+      </filter>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#grass-pat)" opacity="0.5"/>
+
+    <!-- Bankfull channel -->
+    <path d="${bfPath}" fill="url(#bf-grad)" opacity="0.65"/>
+    <!-- Wetted channel -->
+    <path d="${wetPath}" fill="url(#wet-grad)" opacity="0.85"/>
+    <!-- Thalweg dotted -->
+    <path d="M ${thalweg}" stroke="#fdfaf0" stroke-width="0.6" fill="none" stroke-dasharray="2 3" opacity="0.55"/>
+
+    <!-- Trees -->
+    ${[[60,80],[120,330],[280,90],[380,330],[170,75],[400,80],[80,340],[230,360]].map(([x,y]) => `
+      <g transform="translate(${x},${y})">
+        <ellipse cx="0" cy="-2" rx="9" ry="11" fill="#4d5e34" opacity="0.7"/>
+        <ellipse cx="0" cy="-7" rx="6" ry="7" fill="#6b7d4a" opacity="0.85"/>
+        <line x1="0" y1="0" x2="0" y2="6" stroke="#5a4f38" stroke-width="2"/>
+      </g>
+    `).join('')}
+
+    <!-- Title bar -->
+    <g transform="translate(28, 28)">
+      <text font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#2a2418" letter-spacing="1.5">COYOTE CREEK · REACH 03-A</text>
+    </g>
+    <!-- Scale -->
+    <g transform="translate(28, 396)">
+      <line x1="0" y1="0" x2="40" y2="0" stroke="#2a2418" stroke-width="1.5"/>
+      <line x1="0" y1="-3" x2="0" y2="3" stroke="#2a2418" stroke-width="1.5"/>
+      <line x1="40" y1="-3" x2="40" y2="3" stroke="#2a2418" stroke-width="1.5"/>
+      <text x="20" y="-6" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#5a4f38">~10 m</text>
+    </g>
+    <!-- Compass -->
+    <g transform="translate(420, 32)" font-family="Caveat" fill="#b4471f">
+      <text font-size="14">N</text>
+      <line x1="-2" y1="3" x2="-2" y2="22" stroke="#b4471f" stroke-width="1.5"/>
+      <polygon points="-5,7 -2,3 1,7" fill="#b4471f"/>
+    </g>
+    <text x="350" y="200" font-family="Caveat" font-size="20" fill="#2a2418" transform="rotate(-8 350 200)">flow →</text>
+    <!-- Paper grain overlay -->
+    <rect width="100%" height="100%" filter="url(#paper-grain)" opacity="0.3"/>
+  </svg>`;
+}
+
+// =====================================================================
+// STAGE 1: SITE LAYOUT
+// =====================================================================
+// We let the user click 5 points along the stream where they think bankfull
+// edges are, then "measure" perpendicular bankfull widths.
+// Then they place transects at the calculated spacing.
+
+function stageLayout() {
+  const el = document.createElement('div');
+  el.style.cssText = 'display: grid; grid-template-columns: 1fr 360px; gap: 24px;';
+  el.appendChild(layoutCanvas());
+  el.appendChild(layoutSidebar());
+  return el;
+}
+
+function layoutCanvas() {
+  const c = document.createElement('div');
+  c.className = 'panel';
+  c.style.cssText = 'padding: 18px; position: relative; min-height: 540px;';
+
+  const W = 800, H = 520;
+  const sToX = s => 40 + s * (W - 80) / STREAM.len;
+  const latToY = lat => H/2 + lat * 8;
+
+  // Smooth bank polygons
+  const leftBank = [], rightBank = [], wetLeft = [], wetRight = [];
+  for (let s = 0; s <= STREAM.len; s += 0.5) {
+    const cy = latToY(centerlineAt(s));
+    const wPx = trueBankfullAt(s) * 3.5;
+    leftBank.push([sToX(s), cy - wPx * 0.5]);
+    rightBank.push([sToX(s), cy + wPx * 0.5]);
+    wetLeft.push([sToX(s), cy - wPx * 0.32]);
+    wetRight.push([sToX(s), cy + wPx * 0.32]);
+  }
+  const bfPath = 'M ' + leftBank.map(p => p.join(' ')).join(' L ') +
+                 ' L ' + rightBank.slice().reverse().map(p => p.join(' ')).join(' L ') + ' Z';
+  const wetPath = 'M ' + wetLeft.map(p => p.join(' ')).join(' L ') +
+                  ' L ' + wetRight.slice().reverse().map(p => p.join(' ')).join(' L ') + ' Z';
+
+  // 5 measurement targets — equally spaced from BOS by avg-bankfull (we'll compute from "true")
+  const trueBfwAtBOS = trueBankfullAt(0);
+  const measurePositions = [0, 1, 2, 3, 4].map(i => i * trueBfwAtBOS); // s in meters
+
+  const phase = state.bankfullMeasurements.length < 5 ? 'measuring' : (state.transectsLocked ? 'done' : 'transects');
+
+  // Plot user's measurements
+  let measureMarkers = '';
+  state.bankfullMeasurements.forEach((m, i) => {
+    const x = sToX(m.s);
+    const y = latToY(centerlineAt(m.s));
+    const wPx = m.value * 3.5;
+    measureMarkers += `
+      <line x1="${x}" y1="${y - wPx*0.5 - 12}" x2="${x}" y2="${y + wPx*0.5 + 12}" stroke="#b4471f" stroke-width="1.4" stroke-dasharray="3 2"/>
+      <circle cx="${x}" cy="${y}" r="4" fill="#b4471f" stroke="#fdfaf0" stroke-width="1.2"/>
+      <text x="${x+6}" y="${y - wPx*0.5 - 16}" font-family="Caveat" font-size="16" fill="#b4471f">#${i+1}: ${m.value.toFixed(1)}m</text>
+    `;
+  });
+
+  // Next measurement preview (where to click)
+  let preview = '';
+  if (phase === 'measuring') {
+    const i = state.bankfullMeasurements.length;
+    const targetS = i === 0 ? 0 : measurePositions[i];
+    const tx = sToX(targetS);
+    const ty = latToY(centerlineAt(targetS));
+    preview = `
+      <circle cx="${tx}" cy="${ty}" r="14" fill="none" stroke="#b4471f" stroke-width="1.5" stroke-dasharray="2 3" opacity="0.5">
+        <animate attributeName="r" values="14;22;14" dur="1.6s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.6;0.15;0.6" dur="1.6s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="${tx}" cy="${ty}" r="6" fill="none" stroke="#b4471f" stroke-width="1.5" opacity="0.85"/>
+      <text x="${tx}" y="${ty - 24}" text-anchor="middle" font-family="Caveat" font-size="18" fill="#b4471f">tap here ↓</text>
+    `;
+  }
+
+  // Transect positions if in transect phase
+  let transectMarks = '';
+  if (state.widthCategory != null) {
+    const spacing = state.widthCategory; // in meters
+    const nPlaced = state.transectsPlaced;
+    for (let t = 0; t < 11; t++) {
+      const s = t * spacing;
+      if (s > STREAM.len) continue;
+      const x = sToX(s);
+      const y = latToY(centerlineAt(s));
+      const w = trueBankfullAt(s) * 3.5;
+      const placed = t < nPlaced;
+      const next = t === nPlaced && phase === 'transects';
+      const color = placed ? '#4a7d3d' : (next ? '#b4471f' : '#8a7e60');
+      const opacity = placed ? 1 : (next ? 0.9 : 0.3);
+      transectMarks += `
+        <g opacity="${opacity}">
+          <line x1="${x}" y1="${y - w*0.55 - 14}" x2="${x}" y2="${y + w*0.55 + 14}"
+                stroke="${color}" stroke-width="${placed ? 2.5 : 1.4}" ${placed ? '' : 'stroke-dasharray="2 2"'}/>
+          ${placed ? `<circle cx="${x}" cy="${y - w*0.55 - 14}" r="3" fill="${color}"/>
+                      <circle cx="${x}" cy="${y + w*0.55 + 14}" r="3" fill="${color}"/>` : ''}
+          <text x="${x}" y="${y - w*0.55 - 18}" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="${color}" font-weight="600">T${t+1}</text>
+          ${next ? `<text x="${x}" y="${y + w*0.55 + 28}" text-anchor="middle" font-family="Caveat" font-size="16" fill="${color}">click to place →</text>` : ''}
+        </g>
+      `;
+    }
+  }
+
+  c.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <h3 class="display" style="margin: 0; font-size: 22px;">Site Layout · top-down view</h3>
+      <span class="tag" style="color: var(--rust);">stage 01</span>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" style="width: 100%; height: auto; background: linear-gradient(180deg, #e8d9b4, #d4c094); border: 1.5px solid var(--ink); cursor: ${phase === 'done' ? 'default' : 'crosshair'};" id="layout-svg">
+      <defs>
+        <pattern id="grass-pat-2" width="8" height="8" patternUnits="userSpaceOnUse">
+          <path d="M 1 7 L 1 2 M 4 7 L 4 3 M 6 7 L 6 1" stroke="#6b7d4a" stroke-width="0.5" opacity="0.4"/>
+        </pattern>
+        <linearGradient id="lay-bf" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#a8c0d0"/>
+          <stop offset="100%" stop-color="#7a96a8"/>
+        </linearGradient>
+        <linearGradient id="lay-wet" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#5a7e90"/>
+          <stop offset="100%" stop-color="#2c4654"/>
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#grass-pat-2)" opacity="0.55"/>
+      <!-- Bankfull -->
+      <path d="${bfPath}" fill="url(#lay-bf)" opacity="0.75"/>
+      <!-- Wetted -->
+      <path d="${wetPath}" fill="url(#lay-wet)" opacity="0.9"/>
+      <!-- Subtle ripple highlights along the wetted channel -->
+      ${(() => {
+        let r = '';
+        for (let s = 2; s < STREAM.len; s += 6) {
+          const x = sToX(s);
+          const y = latToY(centerlineAt(s));
+          const w = trueBankfullAt(s) * 3.5;
+          r += `<path d="M ${x-w*0.2} ${y - w*0.1} Q ${x} ${y - w*0.18} ${x+w*0.2} ${y - w*0.1}" stroke="#fdfaf0" stroke-width="0.5" fill="none" opacity="0.4"/>`;
+        }
+        return r;
+      })()}
+      <!-- BOS marker -->
+      <g transform="translate(${sToX(0)},${latToY(centerlineAt(0))})">
+        <circle r="11" fill="#fdfaf0" stroke="#2a2418" stroke-width="1.5"/>
+        <circle r="3" fill="#2a2418"/>
+        <text y="-18" text-anchor="middle" font-family="JetBrains Mono" font-size="10" font-weight="700">BOS</text>
+      </g>
+      ${measureMarkers}
+      ${preview}
+      ${transectMarks}
+      <!-- Scale -->
+      <g transform="translate(40, ${H - 30})">
+        <line x1="0" y1="0" x2="${10 * (W-80)/STREAM.len}" y2="0" stroke="#2a2418" stroke-width="1.5"/>
+        <line x1="0" y1="-3" x2="0" y2="3" stroke="#2a2418" stroke-width="1.5"/>
+        <line x1="${10 * (W-80)/STREAM.len}" y1="-3" x2="${10 * (W-80)/STREAM.len}" y2="3" stroke="#2a2418" stroke-width="1.5"/>
+        <text x="${5 * (W-80)/STREAM.len}" y="-6" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5a4f38">10 m</text>
+      </g>
+      <!-- Compass / flow -->
+      <text x="${W-50}" y="30" font-family="Caveat" font-size="22" fill="#b4471f">flow →</text>
+    </svg>
+    <div id="layout-help" style="margin-top: 14px; min-height: 60px;"></div>
+  `;
+
+  // Wire up clicks
+  setTimeout(() => {
+    const svg = c.querySelector('#layout-svg');
+    svg.addEventListener('click', (e) => {
+      if (phase === 'done') return;
+      const rect = svg.getBoundingClientRect();
+      const xPx = (e.clientX - rect.left) / rect.width * W;
+      const yPx = (e.clientY - rect.top) / rect.height * H;
+      const s = (xPx - 40) / (W - 80) * STREAM.len;
+      if (s < 0 || s > STREAM.len) return;
+      const expectedY = latToY(centerlineAt(s));
+      // Allow a click within a generous lateral range (close to channel)
+      if (Math.abs(yPx - expectedY) > 60) {
+        toast('Click <i>on</i> the stream channel.', 'bad', 2200); return;
+      }
+      if (phase === 'measuring') {
+        const i = state.bankfullMeasurements.length;
+        const expected = i === 0 ? 0 : measurePositions[i];
+        // Tolerance: within 0.6 * BFW
+        if (Math.abs(s - expected) > Math.max(1.5, trueBfwAtBOS * 0.6)) {
+          toast(`Try closer to the recommended spacing — protocol says space them <b>1 BFW apart</b>.`, 'bad', 3500);
+          return;
+        }
+        // measurement value is the true bankfull at that point + small noise (user error)
+        const noise = (Math.random() - 0.5) * 0.4;
+        const value = +(trueBankfullAt(s) + noise).toFixed(1);
+        state.bankfullMeasurements.push({ s, value });
+        addRipple(svg, e.clientX, e.clientY);
+        if (state.bankfullMeasurements.length === 5) {
+          // Calculate average → width category
+          const avg = state.bankfullMeasurements.reduce((a,b)=>a+b.value,0) / 5;
+          state.widthCategory = computeWidthCategory(avg);
+          // scoring
+          const trueAvg = STREAM.samples.slice(0, Math.ceil(trueBfwAtBOS*8)).reduce((a,b)=>a+b.bfw,0) / Math.ceil(trueBfwAtBOS*8);
+          if (Math.abs(avg - trueAvg) < 0.5) state.scoreNotes.layout.push('Bankfull widths well-measured.');
+          state.score.layout += 50;
+          toast(`Average BFW = <b>${avg.toFixed(2)} m</b> → site width category <b>${state.widthCategory} m</b>`, 'ok', 4500);
+        }
+        render();
+      } else if (phase === 'transects') {
+        const t = state.transectsPlaced;
+        const expected = t * state.widthCategory;
+        if (Math.abs(s - expected) > state.widthCategory * 0.35) {
+          toast(`Transect ${t+1} should be <b>${state.widthCategory} m</b> from the previous one. Tap closer to the highlighted line.`, 'bad', 3500);
+          return;
+        }
+        state.transectsPlaced++;
+        addRipple(svg, e.clientX, e.clientY);
+        if (state.transectsPlaced >= 11) {
+          state.transectsLocked = true;
+          state.score.layout += 50;
+          state.scoreNotes.layout.push('All 11 transects placed at correct spacing.');
+          toast(`<b>Site complete.</b> 11 transects, ${(10 * state.widthCategory)} m total reach.`, 'ok', 5000);
+        }
+        render();
+      }
+    });
+
+    // Help text
+    const help = c.querySelector('#layout-help');
+    if (phase === 'measuring') {
+      const i = state.bankfullMeasurements.length;
+      help.innerHTML = `
+        <div style="display: flex; gap: 14px; align-items: flex-start;">
+          <div class="hand" style="font-size: 36px; color: var(--rust); line-height: 1;">${i+1}/5</div>
+          <div style="font-size: 14px; color: var(--ink-soft); line-height: 1.5;">
+            <b>Click in the stream</b> at the highlighted spot to take bankfull width measurement #${i+1}.
+            ${i === 0 ? `Start at the <b>bottom of site</b> (BOS).` : `Move <b>upstream by 1 bankfull width</b> from the previous measurement.`}
+            <br/><span style="color: var(--ink-faint); font-style: italic;">In the field, you'd be looking for slope breaks, vegetation lines, and stain marks to find bankfull elevation. Your measurement here includes a little simulated field error.</span>
+          </div>
+        </div>`;
+    } else if (phase === 'transects') {
+      help.innerHTML = `
+        <div style="display: flex; gap: 14px; align-items: flex-start;">
+          <div class="hand" style="font-size: 36px; color: var(--rust); line-height: 1;">${state.transectsPlaced+1}/11</div>
+          <div style="font-size: 14px; color: var(--ink-soft); line-height: 1.5;">
+            Walk upstream and place <b>transect ${state.transectsPlaced+1}</b>, ${state.widthCategory}&nbsp;m from the previous one.
+            Click anywhere near the highlighted line.
+            <br/><span style="color: var(--ink-faint); font-style: italic;">Note: distances are <b>straight-line</b> — don't follow the thalweg around meander bends.</span>
+          </div>
+        </div>`;
+    } else {
+      help.innerHTML = `
+        <div style="border-left: 3px solid var(--green-ok); padding: 12px 16px; background: rgba(74,125,61,0.08); display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+          <div>
+            <b>Site established.</b> Reach length: <span class="mono">${(10 * state.widthCategory)} m</span> · Width category: <span class="mono">${state.widthCategory} m</span>
+            <br/><span style="font-size: 13px; color: var(--ink-soft);">In the field, you'd now place site markers (rebar or trees) at the BOS and TOS for relocation.</span>
+          </div>
+          <button class="btn btn-primary" onclick="goStage('crosssection')">Continue →</button>
+        </div>`;
+    }
+  }, 0);
+
+  return c;
+}
+
+function addRipple(svg, clientX, clientY) {
+  const r = svg.getBoundingClientRect();
+  const W = +svg.getAttribute('viewBox').split(' ')[2];
+  const H = +svg.getAttribute('viewBox').split(' ')[3];
+  const cx = (clientX - r.left) / r.width * W;
+  const cy = (clientY - r.top) / r.height * H;
+  const ns = 'http://www.w3.org/2000/svg';
+  const c1 = document.createElementNS(ns, 'circle');
+  c1.setAttribute('cx', cx); c1.setAttribute('cy', cy); c1.setAttribute('r', '0');
+  c1.setAttribute('fill', 'none'); c1.setAttribute('stroke', '#b4471f'); c1.setAttribute('stroke-width', '2');
+  c1.classList.add('ripple');
+  svg.appendChild(c1);
+  setTimeout(() => c1.remove(), 800);
+}
+
+function computeWidthCategory(avg) {
+  if (avg <= 6) return 6;
+  if (avg <= 8) return 8;
+  if (avg <= 10) return 10;
+  if (avg <= 12) return 12;
+  if (avg <= 14) return 14;
+  if (avg <= 16) return 16;
+  if (avg <= 18) return 18;
+  return 20;
+}
+
+function layoutSidebar() {
+  const s = document.createElement('div');
+  s.className = 'panel';
+  s.style.cssText = 'padding: 22px; align-self: start; position: sticky; top: 20px;';
+
+  const measurements = state.bankfullMeasurements;
+  const avg = measurements.length === 5 ? measurements.reduce((a,b)=>a+b.value,0)/5 : null;
+
+  s.innerHTML = `
+    <h4 class="display" style="margin: 0 0 14px; font-size: 18px;">Field notes — site layout</h4>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-soft); margin-bottom: 18px; line-height: 1.6;">
+      <div><b>SITE:</b> Coyote Creek 03-A</div>
+      <div><b>BOS UTM:</b> 10T 542819 E / 4768214 N</div>
+      <div><b>DATE:</b> ${formatToday()}</div>
+    </div>
+
+    <h5 style="margin: 14px 0 6px; font-size: 13px; font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 0.1em;">Bankfull widths</h5>
+    <table style="width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono'; font-size: 12px;">
+      ${[1,2,3,4,5].map(i => {
+        const m = measurements[i-1];
+        return `<tr style="border-bottom: 1px dotted var(--ink-faint);">
+          <td style="padding: 4px 0;">#${i}</td>
+          <td style="padding: 4px 0; text-align: right;">${m ? m.value.toFixed(1) + ' m' : '—'}</td>
+        </tr>`;
+      }).join('')}
+      <tr style="border-bottom: 2px solid var(--ink); font-weight: 600;">
+        <td style="padding: 6px 0;">avg</td>
+        <td style="padding: 6px 0; text-align: right;">${avg != null ? avg.toFixed(2) + ' m' : '—'}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px 0; color: var(--rust); font-weight: 600;">cat.</td>
+        <td style="padding: 6px 0; text-align: right; color: var(--rust); font-weight: 600;">${state.widthCategory ? state.widthCategory + ' m' : '—'}</td>
+      </tr>
+    </table>
+
+    <h5 style="margin: 22px 0 6px; font-size: 13px; font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 0.1em;">Transects</h5>
+    <div style="display: grid; grid-template-columns: repeat(11, 1fr); gap: 3px;">
+      ${[...Array(11)].map((_,i) => `
+        <div style="aspect-ratio: 1; border: 1px solid var(--ink); display: flex; align-items: center; justify-content: center; font-size: 10px; font-family: 'JetBrains Mono'; ${i < state.transectsPlaced ? 'background: var(--ink); color: var(--paper);' : ''}">${i+1}</div>
+      `).join('')}
+    </div>
+    <div style="font-size: 11px; color: var(--ink-faint); margin-top: 6px; font-style: italic;">
+      ${state.transectsPlaced}/11 placed at ${state.widthCategory ?? '—'} m spacing
+    </div>
+
+    <div style="margin-top: 22px; padding: 12px 14px; background: rgba(192,138,42,0.08); border-left: 3px solid var(--gold); font-size: 13px; line-height: 1.5;">
+      <b style="color: var(--gold); text-transform: uppercase; font-size: 11px; font-family: 'JetBrains Mono'; letter-spacing: 0.1em;">Why?</b><br/>
+      Site length scales with channel size — bigger streams need longer reaches to capture habitat variability. The protocol uses <b>10× width category</b> as a rule of thumb, with 5 widths averaged so a single weird measurement doesn't drag the whole survey.
+    </div>
+  `;
+  return s;
+}
+
+// =====================================================================
+// STAGE 2: CROSS SECTIONS
+// =====================================================================
+// User chooses transect, then drops the depth rod at 11 horizontal points
+// across the bankfull channel.
+
+// Generate a synthetic bed profile per transect
+function bedProfile(transect) {
+  // Returns function(x_norm in [0,1]) → bankfull_depth (m), and water_surface_y (m)
+  const bfw = trueBankfullAt((transect-1) * (state.widthCategory || 6));
+  // Asymmetric U-shape with thalweg slightly off-center
+  const thalwegX = 0.45 + 0.1 * Math.sin(transect * 1.7);
+  const maxDepth = 0.7 + 0.4 * Math.abs(Math.sin(transect * 0.9));
+  // Wetted width is some fraction of bankfull
+  const wettedFrac = 0.55 + 0.1 * Math.cos(transect);
+  const wetLeft = thalwegX - wettedFrac/2;
+  const wetRight = thalwegX + wettedFrac/2;
+  // Water surface depth from bankfull (i.e., bankfull depth at water surface ~ shallow)
+  const waterDepthFromBankfull = maxDepth * 0.3; // water surface is 30% down the bank
+  return {
+    bfw,
+    bedDepth(xn) {
+      // smooth U-shape
+      const d = Math.exp(-Math.pow((xn - thalwegX) / 0.32, 2)) * maxDepth;
+      // tiny perturbation
+      return d + 0.04 * Math.sin(xn * 18 + transect);
+    },
+    waterDepthFromBankfull,
+    wetLeft, wetRight,
+    isWet(xn) { return xn >= wetLeft && xn <= wetRight; },
+    wettedDepth(xn) {
+      if (!this.isWet(xn)) return 0;
+      const bd = this.bedDepth(xn);
+      const wd = bd - waterDepthFromBankfull;
+      return Math.max(0, wd);
+    }
+  };
+}
+
+function stageCrossSection() {
+  const el = document.createElement('div');
+  el.style.cssText = 'display: grid; grid-template-columns: 1fr 360px; gap: 24px;';
+  el.appendChild(crossSectionCanvas());
+  el.appendChild(crossSectionSidebar());
+  return el;
+}
+
+function crossSectionCanvas() {
+  const c = document.createElement('div');
+  c.className = 'panel';
+  c.style.cssText = 'padding: 18px; min-height: 540px;';
+
+  // Pick which transect we're on - cross sections are at every odd transect
+  const oddTransects = [1, 3, 5, 7, 9, 11];
+  const ti = state.csTransect;
+
+  const profile = bedProfile(ti);
+  const W = 800, H = 480;
+  const padX = 80, padY = 60;
+  const xnToPx = xn => padX + xn * (W - 2*padX);
+  const depthToY = d => padY + d * 200;  // 1m = 200px
+
+  // Draw the cross section
+  // The bankfull width is normalized to [0,1] for drawing; underneath we
+  // know the real bankfull width.
+  const bfw = profile.bfw;
+  // 11 sample positions
+  const interval = bfw / 10;
+  const samplePoints = [];
+  for (let i = 0; i < 11; i++) samplePoints.push(i * interval);
+
+  // Place rod ghost at next un-measured point
+  const next = state.csMeasurements.length;
+  const nextXm = next < 11 ? samplePoints[next] : null;
+
+  // build bed path
+  let bedPath = `M ${xnToPx(0)} ${depthToY(0)} `;
+  for (let xn = 0; xn <= 1; xn += 0.005) {
+    bedPath += `L ${xnToPx(xn)} ${depthToY(profile.bedDepth(xn))} `;
+  }
+
+  // water surface line
+  const waterY = depthToY(profile.waterDepthFromBankfull);
+
+  // Existing measurements display
+  let rodMarks = '';
+  state.csMeasurements.forEach((m, i) => {
+    const xn = m.x_real / bfw;
+    const x = xnToPx(xn);
+    rodMarks += `
+      <g>
+        <line x1="${x}" y1="${depthToY(0) - 24}" x2="${x}" y2="${depthToY(m.bf_depth)}"
+              stroke="${'#b4471f'}" stroke-width="2"/>
+        <rect x="${x-3}" y="${depthToY(0) - 26}" width="6" height="4" fill="${'#b4471f'}"/>
+        <text x="${x}" y="${depthToY(0) - 32}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="${'#2a2418'}">${i+1}</text>
+        <text x="${x}" y="${depthToY(m.bf_depth) + 14}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="${'#b4471f'}">${m.bf_depth.toFixed(2)}</text>
+      </g>
+    `;
+  });
+
+  // Next measurement guide
+  let preview = '';
+  if (nextXm != null) {
+    const xn = nextXm / bfw;
+    const x = xnToPx(xn);
+    preview = `
+      <line x1="${x}" y1="${padY - 30}" x2="${x}" y2="${depthToY(profile.bedDepth(xn))}"
+            stroke="${'#2a2418'}" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
+      <text x="${x}" y="${padY - 38}" text-anchor="middle" font-family="Caveat" font-size="18" fill="${'#b4471f'}">drop here</text>
+      <polygon points="${x-5},${padY - 25} ${x+5},${padY - 25} ${x},${padY - 18}" fill="${'#b4471f'}"/>
+    `;
+  }
+
+  // Bank labels
+  const lbBank = `
+    <text x="${xnToPx(0)}" y="${padY - 12}" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="${'#2a2418'}">LEFT BANK</text>
+    <text x="${xnToPx(1)}" y="${padY - 12}" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="${'#2a2418'}">RIGHT BANK</text>
+  `;
+
+  // Bankfull tape line
+  const tapeY = padY - 6;
+  const tapeMarks = (() => {
+    let m = '';
+    for (let i = 0; i <= 10; i++) {
+      const x = padX + i * (W - 2*padX) / 10;
+      m += `<line x1="${x}" y1="${tapeY-3}" x2="${x}" y2="${tapeY+3}" stroke="${'#2a2418'}"/>`;
+    }
+    return m;
+  })();
+
+  c.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
+      <h3 class="display" style="margin: 0; font-size: 22px;">
+        Channel Cross Section · transect <span style="color: var(--rust);">${ti}</span>
+      </h3>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        ${oddTransects.map(t => `
+          <button class="btn ${t === ti ? 'btn-primary' : ''}"
+                  style="padding: 4px 10px; font-size: 11px; box-shadow: ${t === ti ? '2px 2px 0 var(--ink)' : 'none'};"
+                  onclick="window.__pickCSTransect(${t})">T${t}</button>
+        `).join('')}
+      </div>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" style="width: 100%; background: linear-gradient(180deg, #f0e8d6, #e0d4b0); border: 1.5px solid var(--ink);" id="cs-svg">
+      <!-- earth/bank area below bed -->
+      <path d="${bedPath} L ${xnToPx(1)} ${H - padY/2} L ${xnToPx(0)} ${H - padY/2} Z"
+            fill="${'#a89070'}" opacity="0.55"/>
+      <path d="${bedPath} L ${xnToPx(1)} ${H - padY/2} L ${xnToPx(0)} ${H - padY/2} Z"
+            fill="url(#bank-pat)" opacity="0.5"/>
+      <defs>
+        <pattern id="bank-pat" width="6" height="6" patternUnits="userSpaceOnUse">
+          <circle cx="2" cy="2" r="0.5" fill="${'#5a4f38'}" opacity="0.6"/>
+          <circle cx="4" cy="4" r="0.4" fill="${'#5a4f38'}" opacity="0.5"/>
+        </pattern>
+        <linearGradient id="water-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${'#8aa3b5'}" stop-opacity="0.85"/>
+          <stop offset="100%" stop-color="${'#2c4654'}" stop-opacity="0.95"/>
+        </linearGradient>
+      </defs>
+
+      <!-- water -->
+      ${(() => {
+        const wl = profile.wetLeft, wr = profile.wetRight;
+        let wp = `M ${xnToPx(wl)} ${waterY} `;
+        wp += `L ${xnToPx(wr)} ${waterY} `;
+        for (let xn = wr; xn >= wl; xn -= 0.005) {
+          const d = profile.bedDepth(xn);
+          if (d > profile.waterDepthFromBankfull) {
+            wp += `L ${xnToPx(xn)} ${depthToY(d)} `;
+          }
+        }
+        wp += 'Z';
+        return `<path d="${wp}" fill="url(#water-grad)"/>`;
+      })()}
+
+      <!-- water surface ripples -->
+      <path d="${(() => {
+        const wl = profile.wetLeft, wr = profile.wetRight;
+        let p = `M ${xnToPx(wl)} ${waterY} `;
+        for (let xn = wl; xn <= wr; xn += 0.02) {
+          p += `L ${xnToPx(xn)} ${waterY + 0.6 * Math.sin(xn * 30 + Date.now()/600)} `;
+        }
+        return p;
+      })()}" fill="none" stroke="${'#fdfaf0'}" stroke-width="0.6" opacity="0.7"/>
+
+      <!-- Bankfull tape line -->
+      <line x1="${padX}" y1="${tapeY}" x2="${W - padX}" y2="${tapeY}" stroke="${'#2a2418'}" stroke-width="1.5"/>
+      ${tapeMarks}
+      <text x="${padX - 8}" y="${tapeY + 4}" text-anchor="end" font-family="JetBrains Mono" font-size="10" fill="${'#2a2418'}">0 m</text>
+      <text x="${W - padX + 8}" y="${tapeY + 4}" font-family="JetBrains Mono" font-size="10" fill="${'#2a2418'}">${bfw.toFixed(1)} m</text>
+      <text x="${W/2}" y="${padY - 22}" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="${'#2a2418'}" letter-spacing="0.15em">BANKFULL TAPE</text>
+
+      ${lbBank}
+
+      <!-- Bed line itself -->
+      <path d="${bedPath}" fill="none" stroke="${'#5a4f38'}" stroke-width="1.5"/>
+
+      <!-- Water depth indicator (dashed) -->
+      <line x1="${padX}" y1="${waterY}" x2="${W-padX}" y2="${waterY}" stroke="${'#4a6878'}" stroke-width="0.8" stroke-dasharray="3 3" opacity="0.6"/>
+      <text x="${W-padX+8}" y="${waterY+4}" font-family="Caveat" font-size="14" fill="${'#4a6878'}">water</text>
+
+      ${rodMarks}
+      ${preview}
+    </svg>
+    <div id="cs-help" style="margin-top: 14px;"></div>
+  `;
+
+  setTimeout(() => {
+    window.__pickCSTransect = (t) => {
+      if (t !== state.csTransect) {
+        // Save current measurements before switching? For simplicity, restart.
+        if (state.csMeasurements.length > 0 && state.csMeasurements.length < 11) {
+          if (!confirm('Switching transects will discard current measurements. Continue?')) return;
+        }
+        state.csTransect = t;
+        state.csMeasurements = [];
+        render();
+      }
+    };
+
+    const svg = c.querySelector('#cs-svg');
+    svg.style.cursor = state.csMeasurements.length < 11 ? 'crosshair' : 'default';
+    svg.addEventListener('click', (e) => {
+      if (state.csMeasurements.length >= 11) return;
+      const rect = svg.getBoundingClientRect();
+      const xPx = (e.clientX - rect.left) / rect.width * W;
+      const next = state.csMeasurements.length;
+      const expectedXn = samplePoints[next] / bfw;
+      const expectedPx = xnToPx(expectedXn);
+      // Tolerance: 30px
+      if (Math.abs(xPx - expectedPx) > 30) {
+        toast(`Aim for the highlighted spot (sample ${next+1} of 11).`, 'bad', 2200);
+        return;
+      }
+      const xn = (xPx - padX) / (W - 2*padX);
+      const x_real = xn * bfw;
+      const bf_depth = profile.bedDepth(xn);
+      const w_depth = profile.wettedDepth(xn);
+      // Add small noise to simulate field error
+      const measured_bf = +(bf_depth + (Math.random()-0.5) * 0.04).toFixed(2);
+      const measured_w = w_depth > 0 ? +(w_depth + (Math.random()-0.5) * 0.03).toFixed(2) : 0;
+      state.csMeasurements.push({
+        x_real: +x_real.toFixed(2),
+        bf_depth: Math.max(0, measured_bf),
+        w_depth: Math.max(0, measured_w),
+      });
+      addRipple(svg, e.clientX, e.clientY);
+      if (state.csMeasurements.length === 11) {
+        state.csComplete = true;
+        state.score.crosssection += 50;
+        state.scoreNotes.crosssection.push(`Cross section complete at transect ${ti}.`);
+        // Compute mean depth, area for fun
+        const meanD = state.csMeasurements.reduce((a,b)=>a+b.bf_depth,0)/11;
+        // Count close-to-truth measurements
+        const close = state.csMeasurements.filter((m, i) => {
+          const xn = m.x_real / bfw;
+          const truth = profile.bedDepth(xn);
+          return Math.abs(m.bf_depth - truth) < 0.08;
+        }).length;
+        toast(`<b>Cross section logged.</b> Mean BF depth = ${meanD.toFixed(2)} m · ${close}/11 within field tolerance`, 'ok', 4500);
+      }
+      render();
+    });
+
+    const help = c.querySelector('#cs-help');
+    if (state.csMeasurements.length < 11) {
+      help.innerHTML = `
+        <div style="display: flex; gap: 14px; align-items: flex-start;">
+          <div class="hand" style="font-size: 36px; color: var(--rust); line-height: 1;">${state.csMeasurements.length+1}/11</div>
+          <div style="font-size: 14px; color: var(--ink-soft); line-height: 1.5;">
+            <b>Drop the depth rod</b> at the highlighted spot. The interval is bankfull width (${bfw.toFixed(1)}&nbsp;m) ÷ 10.
+            Both <b>bankfull depth</b> (top of tape to bed) and <b>wetted depth</b> (water surface to bed) are recorded.
+            ${state.csMeasurements.length === 0 ? `<br/><span style="font-style: italic; color: var(--ink-faint);">First measurement is at 0 m — bankfull depth is 0 here by definition (you're at the bank top).</span>` : ''}
+          </div>
+        </div>`;
+    } else {
+      const meanD = state.csMeasurements.reduce((a,b)=>a+b.bf_depth,0)/11;
+      const wetMeasures = state.csMeasurements.filter(m => m.w_depth > 0);
+      const wettedW = profile.wetRight - profile.wetLeft;
+      // Compute per-point accuracy
+      const close = state.csMeasurements.filter((m, i) => {
+        const xn = m.x_real / bfw;
+        const truth = profile.bedDepth(xn);
+        return Math.abs(m.bf_depth - truth) < 0.08;
+      }).length;
+      // Calculate cross-sectional area (trapezoidal)
+      let area = 0;
+      for (let i = 0; i < state.csMeasurements.length - 1; i++) {
+        const dx = state.csMeasurements[i+1].x_real - state.csMeasurements[i].x_real;
+        area += dx * (state.csMeasurements[i].bf_depth + state.csMeasurements[i+1].bf_depth) / 2;
+      }
+      help.innerHTML = `
+        <div style="border-left: 3px solid var(--green-ok); padding: 14px 18px; background: rgba(74,125,61,0.08);">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
+            <div style="display: flex; gap: 24px; flex-wrap: wrap; font-size: 13px;">
+              <div><b style="font-family: 'JetBrains Mono'; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft);">Mean BF depth</b><br/><span class="mono" style="font-size: 16px;">${meanD.toFixed(2)} m</span></div>
+              <div><b style="font-family: 'JetBrains Mono'; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft);">Wetted W</b><br/><span class="mono" style="font-size: 16px;">${(wettedW * bfw).toFixed(1)} m</span></div>
+              <div><b style="font-family: 'JetBrains Mono'; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft);">XS area</b><br/><span class="mono" style="font-size: 16px;">${area.toFixed(2)} m²</span></div>
+              <div><b style="font-family: 'JetBrains Mono'; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft);">Accuracy</b><br/><span class="mono" style="font-size: 16px; color: ${close >= 9 ? 'var(--green-ok)' : close >= 6 ? 'var(--gold)' : 'var(--red-bad)'};">${close}/11</span></div>
+            </div>
+            <button class="btn btn-primary" onclick="goStage('units')">Continue →</button>
+          </div>
+          <div style="margin-top: 10px; font-size: 12px; color: var(--ink-soft); font-style: italic;">
+            ${close >= 9 ? '✓ Solid measurements — you\'d trust this cross section.' : close >= 6 ? 'Mixed — some depths drifted from truth. Keep the rod vertical and tap the bed firmly.' : 'A lot of drift — common causes: tilted rod, soft bed (rod sinks), or reading the wrong tape mark.'}
+          </div>
+        </div>`;
+    }
+  }, 0);
+
+  return c;
+}
+
+function crossSectionSidebar() {
+  const s = document.createElement('div');
+  s.className = 'panel';
+  s.style.cssText = 'padding: 22px; align-self: start;';
+
+  const ti = state.csTransect;
+  const profile = bedProfile(ti);
+
+  s.innerHTML = `
+    <h4 class="display" style="margin: 0 0 14px; font-size: 18px;">Cross-section log · T${ti}</h4>
+    <table style="width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono'; font-size: 11px;">
+      <thead>
+        <tr style="border-bottom: 2px solid var(--ink);">
+          <th style="text-align: left; padding: 6px 0;">#</th>
+          <th style="text-align: right; padding: 6px 4px;">x (m)</th>
+          <th style="text-align: right; padding: 6px 4px;">BF depth</th>
+          <th style="text-align: right; padding: 6px 0;">W depth</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${[...Array(11)].map((_, i) => {
+          const m = state.csMeasurements[i];
+          return `<tr style="border-bottom: 1px dotted var(--ink-faint);">
+            <td style="padding: 4px 0;">${i+1}</td>
+            <td style="padding: 4px 4px; text-align: right;">${m ? m.x_real.toFixed(2) : '—'}</td>
+            <td style="padding: 4px 4px; text-align: right; ${m ? '' : 'color: var(--ink-faint);'}">${m ? m.bf_depth.toFixed(2) : '—'}</td>
+            <td style="padding: 4px 0; text-align: right; ${m ? '' : 'color: var(--ink-faint);'}">${m ? m.w_depth.toFixed(2) : '—'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+
+    <div style="margin-top: 22px; padding: 12px 14px; background: rgba(192,138,42,0.08); border-left: 3px solid var(--gold); font-size: 13px; line-height: 1.5;">
+      <b style="color: var(--gold); text-transform: uppercase; font-size: 11px; font-family: 'JetBrains Mono'; letter-spacing: 0.1em;">Why?</b><br/>
+      <b>Bankfull depth</b> describes channel <i>capacity</i> — independent of today's flow. <b>Wetted depth</b> reflects current conditions and habitat for fish. The 11-point grid lets you compute mean depth, max depth, and cross-sectional area without a full bathymetric survey.
+    </div>
+  `;
+  return s;
+}
+
+// =====================================================================
+// STAGE 3: CHANNEL UNITS
+// =====================================================================
+// User identifies pool / riffle / run boundaries on a longitudinal profile
+
+const TRUE_UNITS = [
+  { start: 0,    end: 0.10, type: 'riffle' },
+  { start: 0.10, end: 0.22, type: 'run' },
+  { start: 0.22, end: 0.32, type: 'pool' },
+  { start: 0.32, end: 0.42, type: 'riffle' },
+  { start: 0.42, end: 0.55, type: 'run' },
+  { start: 0.55, end: 0.65, type: 'pool' },
+  { start: 0.65, end: 0.78, type: 'riffle' },
+  { start: 0.78, end: 0.88, type: 'run' },
+  { start: 0.88, end: 1.0,  type: 'riffle' },
+];
+const UNIT_COLORS = { pool: '#4a6878', riffle: '#c46943', run: '#8aa66e' };
+const UNIT_INFO = {
+  pool: { name: 'Pool', desc: 'Low gradient, smooth flow, lateral & longitudinal concavity, deeper.' },
+  riffle: { name: 'Riffle', desc: 'Moderate-to-steep gradient, coarse substrate, turbulent flow, shallow.' },
+  run: { name: 'Run', desc: 'Low gradient, smooth laminar flow, uniform depth, no concavity.' },
+};
+
+function stageUnits() {
+  const el = document.createElement('div');
+  el.style.cssText = 'display: grid; grid-template-columns: 1fr; gap: 24px;';
+
+  const W = 1100, H = 280;
+  const padX = 60, padY = 40;
+  const sToX = sn => padX + sn * (W - 2*padX);
+
+  // Generate longitudinal water profile and bed profile
+  function bedAt(sn) {
+    // overall slope + unit-specific shape
+    let z = 1 - sn * 0.6;  // overall drop from upstream-style; reverse so flow → right looks lower
+    z = sn * 0.6;
+    // bumps in riffles, dips in pools, smooth in runs
+    for (const u of TRUE_UNITS) {
+      if (sn >= u.start && sn <= u.end) {
+        const t = (sn - u.start) / (u.end - u.start);
+        if (u.type === 'pool') z += -0.18 * Math.sin(t * Math.PI);
+        if (u.type === 'riffle') z += 0.12 * Math.sin(t * Math.PI * 2);
+      }
+    }
+    return z;
+  }
+  function waterAt(sn) {
+    // smooth water surface (mostly) - water has small drop in riffles
+    let z = sn * 0.55 - 0.08;
+    return z;
+  }
+
+  // Build view
+  const c = document.createElement('div');
+  c.className = 'panel';
+  c.style.cssText = 'padding: 18px;';
+
+  // bed path
+  let bedPath = `M ${sToX(0)} ${padY + bedAt(0) * 200} `;
+  for (let sn = 0; sn <= 1; sn += 0.005) bedPath += `L ${sToX(sn)} ${padY + bedAt(sn) * 200} `;
+  bedPath += ` L ${sToX(1)} ${H} L ${sToX(0)} ${H} Z`;
+
+  // water path
+  let waterPath = `M ${sToX(0)} ${padY + waterAt(0) * 200} `;
+  for (let sn = 0; sn <= 1; sn += 0.005) {
+    const w = waterAt(sn);
+    const b = bedAt(sn);
+    const ws = Math.min(w, b);
+    waterPath += `L ${sToX(sn)} ${padY + ws * 200} `;
+  }
+  for (let sn = 1; sn >= 0; sn -= 0.005) waterPath += `L ${sToX(sn)} ${padY + bedAt(sn) * 200} `;
+  waterPath += 'Z';
+
+  // user boundaries
+  const boundaries = state.unitBoundaries; // sorted, including 0 and 1
+  const segments = [];
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    segments.push({ start: boundaries[i], end: boundaries[i+1], type: state.unitClassifications[i] || null });
+  }
+
+  let segmentBands = '';
+  segments.forEach((seg, i) => {
+    const x1 = sToX(seg.start), x2 = sToX(seg.end);
+    const color = seg.type ? UNIT_COLORS[seg.type] : '#cccccc';
+    segmentBands += `
+      <rect x="${x1}" y="${padY - 22}" width="${x2-x1}" height="14" fill="${color}" opacity="0.7" stroke="${'#2a2418'}" stroke-width="1"/>
+      <text x="${(x1+x2)/2}" y="${padY - 11}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" font-weight="600" fill="${'#fdfaf0'}">${seg.type ? seg.type.toUpperCase() : 'u'+(i+1)}</text>
+    `;
+  });
+
+  // boundary markers
+  let boundaryMarks = '';
+  boundaries.forEach((b, i) => {
+    if (i === 0 || i === boundaries.length - 1) return; // skip endpoints
+    const x = sToX(b);
+    boundaryMarks += `
+      <line x1="${x}" y1="${padY - 26}" x2="${x}" y2="${H - 10}" stroke="${'#b4471f'}" stroke-width="1.4" stroke-dasharray="3 2"/>
+      <circle cx="${x}" cy="${padY - 30}" r="6" fill="${'#b4471f'}" stroke="${'#2a2418'}" stroke-width="1.5"
+              style="cursor: pointer;" data-boundary="${i}" class="boundary-handle"/>
+    `;
+  });
+
+  c.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <h3 class="display" style="margin: 0; font-size: 22px;">Channel Units · longitudinal profile</h3>
+      <span class="tag" style="color: var(--rust);">stage 03</span>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" style="width: 100%; background: linear-gradient(180deg, #f0e8d6 0%, #e0d4b0 50%, #d0c290 100%); border: 1.5px solid var(--ink); cursor: ${state.unitsComplete ? 'default' : 'crosshair'};" id="unit-svg">
+      <!-- earth -->
+      <path d="${bedPath}" fill="${'#a89070'}" opacity="0.6"/>
+      <path d="${bedPath}" fill="url(#bank-pat)" opacity="0.4"/>
+      <!-- water -->
+      <path d="${waterPath}" fill="${'#4a6878'}" opacity="0.7"/>
+      <!-- bed line -->
+      <path d="${(() => {
+        let p = `M ${sToX(0)} ${padY + bedAt(0) * 200} `;
+        for (let sn = 0; sn <= 1; sn += 0.005) p += `L ${sToX(sn)} ${padY + bedAt(sn) * 200} `;
+        return p;
+      })()}" fill="none" stroke="${'#5a4f38'}" stroke-width="1.5"/>
+      <!-- segments -->
+      ${segmentBands}
+      <!-- boundaries -->
+      ${boundaryMarks}
+      <!-- BOS / TOS labels -->
+      <text x="${sToX(0)}" y="${H - 8}" text-anchor="start" font-family="JetBrains Mono" font-size="11" font-weight="600">BOS →</text>
+      <text x="${sToX(1)}" y="${H - 8}" text-anchor="end" font-family="JetBrains Mono" font-size="11" font-weight="600">→ TOS</text>
+      <text x="${W/2}" y="20" text-anchor="middle" font-family="Caveat" font-size="20" fill="${'#b4471f'}">flow direction →</text>
+    </svg>
+    <div style="margin-top: 14px; display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start;">
+      <div style="flex: 2; min-width: 280px;">
+        <h5 style="margin: 0 0 8px; font-size: 13px; font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 0.1em;">Step 1: Click on the profile to add unit boundaries</h5>
+        <p style="margin: 0; font-size: 13px; color: var(--ink-soft); line-height: 1.5;">
+          A new unit starts where gradient, bedform, substrate, or flow changes. Aim for <b>${TRUE_UNITS.length}</b> distinct units along this reach. Click a boundary marker to remove it. Boundaries should be at least 1 channel-width apart.
+        </p>
+      </div>
+      <div style="flex: 1; min-width: 200px; display: flex; gap: 6px; flex-wrap: wrap;">
+        <button class="btn btn-ghost" style="font-size: 10px; padding: 6px 10px;" onclick="window.__resetBoundaries()">↺ Reset</button>
+        <button class="btn" style="font-size: 10px; padding: 6px 10px;" onclick="window.__autoBoundaries()">≈ Suggest</button>
+      </div>
+    </div>
+
+    <div id="unit-classify" style="margin-top: 22px;"></div>
+  `;
+
+  // classifier panel
+  setTimeout(() => {
+    const svg = c.querySelector('#unit-svg');
+    svg.addEventListener('click', (e) => {
+      if (state.unitsComplete) return;
+      // Don't add boundary if user clicked an existing handle
+      if (e.target.classList.contains('boundary-handle')) return;
+      const rect = svg.getBoundingClientRect();
+      const xPx = (e.clientX - rect.left) / rect.width * W;
+      const sn = (xPx - padX) / (W - 2*padX);
+      if (sn < 0.04 || sn > 0.96) return;
+      // Ensure not too close to existing
+      if (state.unitBoundaries.some(b => Math.abs(b - sn) < 0.04)) {
+        toast('Too close to an existing boundary.', 'bad', 1800); return;
+      }
+      state.unitBoundaries.push(sn);
+      state.unitBoundaries.sort((a,b) => a - b);
+      // keep classifications synced
+      state.unitClassifications = (state.unitBoundaries.length - 1 > state.unitClassifications.length)
+        ? [...state.unitClassifications, null]
+        : state.unitClassifications.slice(0, state.unitBoundaries.length - 1);
+      addRipple(svg, e.clientX, e.clientY);
+      render();
+    });
+    // Boundary handle clicks → remove
+    svg.querySelectorAll('.boundary-handle').forEach(h => {
+      h.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const i = +h.dataset.boundary;
+        state.unitBoundaries.splice(i, 1);
+        state.unitClassifications.splice(i-1, 1); // remove the classification corresponding to merged segments
+        render();
+      });
+    });
+
+    window.__resetBoundaries = () => {
+      state.unitBoundaries = [0, 1];
+      state.unitClassifications = [];
+      render();
+    };
+    window.__autoBoundaries = () => {
+      // Place boundaries at the true unit boundaries
+      state.unitBoundaries = [0, ...TRUE_UNITS.slice(0, -1).map(u => u.end), 1];
+      state.unitClassifications = TRUE_UNITS.map(u => null);
+      render();
+      toast('Auto-placed boundaries at true breaks (you still classify them).', 'info', 3500);
+    };
+
+    const cf = c.querySelector('#unit-classify');
+    if (segments.length > 0) {
+      cf.innerHTML = `
+        <h5 style="margin: 0 0 12px; font-size: 13px; font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 0.1em;">Step 2: Classify each unit</h5>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px;">
+          ${segments.map((seg, i) => {
+            const cls = state.unitClassifications[i];
+            return `
+            <div style="border: 1.5px solid ${cls ? UNIT_COLORS[cls] : 'var(--ink-faint)'}; padding: 10px 12px; background: ${cls ? UNIT_COLORS[cls] + '20' : 'rgba(255,250,240,0.5)'};">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-family: 'JetBrains Mono'; font-weight: 600; font-size: 12px;">u${i+1}</span>
+                <span style="font-family: 'JetBrains Mono'; font-size: 10px; color: var(--ink-faint);">${(seg.start*100).toFixed(0)}–${(seg.end*100).toFixed(0)}%</span>
+              </div>
+              <div style="display: flex; gap: 4px;">
+                ${['pool','riffle','run'].map(t => `
+                  <button onclick="window.__classify(${i}, '${t}')"
+                          style="flex:1; border: 1px solid ${UNIT_COLORS[t]}; background: ${cls === t ? UNIT_COLORS[t] : 'transparent'}; color: ${cls === t ? '#fdfaf0' : UNIT_COLORS[t]}; font-family: 'JetBrains Mono'; font-size: 10px; padding: 5px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em;">
+                    ${t[0].toUpperCase()+t.slice(1,4)}
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+            `;
+          }).join('')}
+        </div>
+        <div style="margin-top: 18px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+          <button class="btn btn-primary" ${state.unitClassifications.some(c => !c) ? 'disabled' : ''} onclick="window.__finishUnits()">Score units →</button>
+          ${state.unitsComplete ? `<button class="btn btn-primary" onclick="goStage('substrate')">Continue to Substrate →</button>` : ''}
+        </div>
+      `;
+    }
+    window.__classify = (i, t) => { state.unitClassifications[i] = t; render(); };
+    window.__finishUnits = () => {
+      // Compare to TRUE_UNITS
+      let correct = 0, total = state.unitClassifications.length;
+      const wrongUnits = [];
+      state.unitClassifications.forEach((cls, i) => {
+        const seg = segments[i];
+        const mid = (seg.start + seg.end) / 2;
+        const trueU = TRUE_UNITS.find(u => mid >= u.start && mid <= u.end);
+        if (trueU && trueU.type === cls) correct++;
+        else if (trueU) wrongUnits.push({ idx: i+1, said: cls, actual: trueU.type });
+      });
+      const pct = (correct / total) * 100;
+      state.unitsComplete = true;
+      state.unitsWrong = wrongUnits;
+      state.score.units = Math.round(pct);
+      state.scoreNotes.units.push(`${correct}/${total} units classified correctly (${pct.toFixed(0)}%).`);
+      const boundaryDelta = Math.abs(state.unitBoundaries.length - 1 - TRUE_UNITS.length);
+      if (boundaryDelta === 0) state.scoreNotes.units.push('Correct number of channel units identified.');
+      else state.scoreNotes.units.push(`Identified ${state.unitBoundaries.length - 1} units; ${TRUE_UNITS.length} are present.`);
+      toast(`<b>${correct}/${total} units classified correctly</b> (${pct.toFixed(0)}%)`, pct >= 70 ? 'ok' : 'info', 5000);
+      render();
+    };
+  }, 0);
+
+  el.appendChild(c);
+
+  // Misclassification breakdown (if scored)
+  if (state.unitsComplete && state.unitsWrong && state.unitsWrong.length > 0) {
+    const fb = document.createElement('div');
+    fb.className = 'panel';
+    fb.style.cssText = 'padding: 22px; border-left: 4px solid var(--rust);';
+    fb.innerHTML = `
+      <h4 class="display" style="margin: 0 0 10px; font-size: 18px;">Where you missed</h4>
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px;">
+        ${state.unitsWrong.map(w => {
+          const hints = {
+            pool: 'Pools are concave both laterally and longitudinally — the bed dips below the surrounding profile and the water surface is glassy.',
+            riffle: 'Riffles sit on topographic <b>highs</b> with steeper gradient (>1%), coarse cobbles/boulders, and turbulent surface.',
+            run: 'Runs are smooth and uniform — low gradient like a pool, but no concavity. Travel-corridor habitat.',
+          };
+          return `<div style="border: 1px solid var(--ink-faint); padding: 10px 14px;">
+            <div style="font-family: 'JetBrains Mono'; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px;">u${w.idx}</div>
+            <div style="font-size: 13px; line-height: 1.5;">You said <b style="color: ${UNIT_COLORS[w.said]}">${w.said}</b>, actually <b style="color: ${UNIT_COLORS[w.actual]}">${w.actual}</b>.</div>
+            <div style="font-size: 12px; color: var(--ink-soft); margin-top: 6px; font-style: italic;">${hints[w.actual]}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+    el.appendChild(fb);
+  }
+
+  // unit info panel
+  const info = document.createElement('div');
+  info.className = 'panel';
+  info.style.cssText = 'padding: 22px;';
+  info.innerHTML = `
+    <h4 class="display" style="margin: 0 0 12px; font-size: 18px;">Unit reference</h4>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;">
+      ${['pool','riffle','run'].map(t => `
+        <div style="border-left: 4px solid ${UNIT_COLORS[t]}; padding: 10px 14px; background: ${UNIT_COLORS[t]}15;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <h5 class="display" style="margin: 0; font-size: 18px; color: ${UNIT_COLORS[t]};">${UNIT_INFO[t].name}</h5>
+            <span style="font-family: 'JetBrains Mono'; font-size: 10px; color: ${UNIT_COLORS[t]};">${t === 'riffle' ? '> 1%' : '< 1%'}</span>
+          </div>
+          <p style="margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: var(--ink-soft);">${UNIT_INFO[t].desc}</p>
+        </div>
+      `).join('')}
+    </div>
+    <div style="margin-top: 14px; padding: 12px 14px; background: rgba(192,138,42,0.08); border-left: 3px solid var(--gold); font-size: 13px; line-height: 1.5;">
+      <b style="color: var(--gold); text-transform: uppercase; font-size: 11px; font-family: 'JetBrains Mono'; letter-spacing: 0.1em;">Why?</b>
+      Channel units organize the reach into habitats fish actually <i>use</i> differently. Riffles oxygenate water and support invertebrates; pools provide cover and slow-water rest; runs are travel corridors. Many subsequent measurements (substrate, undercuts, large wood) tie back to the unit they fall in.
+    </div>
+  `;
+  el.appendChild(info);
+
+  return el;
+}
+
+// =====================================================================
+// STAGE 4: SUBSTRATE
+// =====================================================================
+// Step 1: Place 6 cross-sections, prioritizing riffles
+// Step 2: At each cross-section, "blind-pick" 11 particles, classify b-axis
+// Step 3: Cobble embeddedness for cobble-class particles
+
+const SIZE_CLASSES = [
+  { label: 'fines', max: 2, color: '#8a7e60' },
+  { label: 'sand', max: 2, color: '#c08a2a' },
+  { label: '4', max: 4, color: '#b8a070' },
+  { label: '8', max: 8, color: '#a89060' },
+  { label: '16', max: 16, color: '#988050' },
+  { label: '32', max: 32, color: '#887040' },
+  { label: '64', max: 64, color: '#786030' },
+  { label: '90', max: 90, color: '#685828' },
+  { label: '128', max: 128, color: '#585020' },
+  { label: '180', max: 180, color: '#484818' },
+  { label: '>180', max: 999, color: '#383812' },
+  { label: 'bedrock', max: 9999, color: '#2a2418' },
+];
+
+function stageSubstrate() {
+  const el = document.createElement('div');
+  el.className = 'fadein';
+
+  // Compute riffles in user's classification
+  const segments = [];
+  for (let i = 0; i < state.unitBoundaries.length - 1; i++) {
+    segments.push({
+      start: state.unitBoundaries[i],
+      end: state.unitBoundaries[i+1],
+      type: state.unitClassifications[i] || null,
+      idx: i + 1,
+    });
+  }
+  const riffles = segments.filter(s => s.type === 'riffle');
+  // Use TRUE_UNITS as fallback if user skipped/erred
+  const trueRiffles = TRUE_UNITS.map((u, i) => ({...u, idx: i+1})).filter(u => u.type === 'riffle');
+  const useRiffles = riffles.length > 0 ? riffles : trueRiffles;
+
+  // Phase: choose cross-sections, then sample particles
+  const phase = state.substrateCrossSections.length < 6 ? 'choose' : 'sample';
+
+  if (phase === 'choose') {
+    el.appendChild(substrateChoosePanel(segments, useRiffles));
+  } else {
+    el.appendChild(substrateSamplePanel());
+  }
+  return el;
+}
+
+function substrateChoosePanel(segments, riffles) {
+  const c = document.createElement('div');
+  c.className = 'panel';
+  c.style.cssText = 'padding: 22px;';
+
+  const W = 1100, H = 110;
+  const padX = 60;
+  const sToX = sn => padX + sn * (W - 2*padX);
+
+  // Build profile-like band
+  let segBands = '';
+  segments.forEach(seg => {
+    const color = seg.type ? UNIT_COLORS[seg.type] : '#aaa';
+    segBands += `
+      <rect x="${sToX(seg.start)}" y="20" width="${sToX(seg.end)-sToX(seg.start)}" height="50"
+            fill="${color}" opacity="0.65" stroke="${'#2a2418'}" stroke-width="1"/>
+      <text x="${sToX((seg.start+seg.end)/2)}" y="48" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="${'#fdfaf0'}">u${seg.idx}</text>
+      <text x="${sToX((seg.start+seg.end)/2)}" y="78" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="${'#2a2418'}">${seg.type ? seg.type : '—'}</text>
+    `;
+  });
+
+  // Show user's chosen cross-sections as flags
+  state.substrateCrossSections.forEach((cs, i) => {
+    const x = sToX(cs.position);
+    segBands += `
+      <line x1="${x}" y1="14" x2="${x}" y2="74" stroke="${'#b4471f'}" stroke-width="2"/>
+      <polygon points="${x},14 ${x+10},10 ${x+10},20" fill="${'#b4471f'}"/>
+      <text x="${x}" y="98" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="${'#b4471f'}" font-weight="600">CS${i+1}</text>
+    `;
+  });
+
+  // Suggest button: smartly distribute 6 across riffles (or top up with runs)
+  c.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <h3 class="display" style="margin: 0; font-size: 22px;">Substrate · cross-section placement</h3>
+      <span class="tag" style="color: var(--rust);">stage 04 — step 1/2</span>
+    </div>
+    <p style="font-size: 14px; color: var(--ink-soft); line-height: 1.6; max-width: 700px; margin: 0 0 16px;">
+      Place <b>6 cross-sections</b> for substrate sampling. <b>Riffles get priority</b>: if there are ≥6 riffles, one per riffle. With fewer riffles, distribute extras proportional to riffle length (then add runs if needed). Don't put two cross-sections closer than 2 m.
+    </p>
+    <svg viewBox="0 0 ${W} ${H}" style="width: 100%; background: linear-gradient(180deg, #f0e8d6, #e0d4b0); border: 1.5px solid var(--ink); cursor: ${state.substrateCrossSections.length < 6 ? 'crosshair' : 'default'};" id="sub-svg">
+      ${segBands}
+      <text x="${sToX(0)}" y="14" text-anchor="start" font-family="JetBrains Mono" font-size="9">BOS</text>
+      <text x="${sToX(1)}" y="14" text-anchor="end" font-family="JetBrains Mono" font-size="9">TOS</text>
+    </svg>
+    <div style="margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+      <button class="btn btn-ghost" style="font-size: 10px; padding: 6px 10px;" onclick="window.__resetCS()">↺ Reset cross-sections</button>
+      <button class="btn" style="font-size: 10px; padding: 6px 10px;" onclick="window.__suggestCS()">≈ Suggest placement</button>
+      <span style="margin-left: auto; font-size: 13px; color: var(--ink-soft);">${state.substrateCrossSections.length}/6 placed</span>
+    </div>
+    <div id="sub-help" style="margin-top: 14px;"></div>
+  `;
+
+  setTimeout(() => {
+    const svg = c.querySelector('#sub-svg');
+    svg.addEventListener('click', (e) => {
+      if (state.substrateCrossSections.length >= 6) return;
+      const rect = svg.getBoundingClientRect();
+      const xPx = (e.clientX - rect.left) / rect.width * W;
+      const sn = (xPx - padX) / (W - 2*padX);
+      if (sn < 0.01 || sn > 0.99) return;
+      // Min spacing: 2m mapped to ratio. Reach length ≈ 10 * widthCategory.
+      const reachM = 10 * (state.widthCategory || 6);
+      const minSep = 2 / reachM;
+      if (state.substrateCrossSections.some(cs => Math.abs(cs.position - sn) < minSep)) {
+        toast('Cross-sections must be ≥ 2 m apart.', 'bad', 2200); return;
+      }
+      // Find which segment this is in
+      const seg = segments.find(s => sn >= s.start && sn <= s.end);
+      state.substrateCrossSections.push({ position: sn, unitType: seg?.type, unitIdx: seg?.idx });
+      addRipple(svg, e.clientX, e.clientY);
+      render();
+    });
+    window.__resetCS = () => { state.substrateCrossSections = []; state.substratePicks = []; render(); };
+    window.__suggestCS = () => {
+      // Use TRUE_UNITS as the canonical reference for placement
+      const trueRiffles = TRUE_UNITS.map((u, i) => ({...u, idx: i+1})).filter(u => u.type === 'riffle');
+      const totalRiffleLen = trueRiffles.reduce((a,b) => a + (b.end - b.start), 0);
+      const placements = [];
+      if (trueRiffles.length >= 6) {
+        // 1 per riffle, midpoint
+        for (let i = 0; i < 6; i++) {
+          const r = trueRiffles[i];
+          placements.push({ position: (r.start + r.end) / 2, unitType: 'riffle', unitIdx: r.idx });
+        }
+      } else {
+        // distribute proportionally to riffle length
+        let assigned = 0;
+        const need = 6;
+        const counts = trueRiffles.map(r => Math.max(1, Math.round(need * (r.end - r.start) / totalRiffleLen)));
+        // adjust to total exactly need
+        let sum = counts.reduce((a,b)=>a+b,0);
+        while (sum > need) { counts[counts.indexOf(Math.max(...counts))]--; sum--; }
+        while (sum < need) { counts[counts.indexOf(Math.min(...counts))]++; sum++; }
+        trueRiffles.forEach((r, i) => {
+          const k = counts[i];
+          for (let j = 0; j < k; j++) {
+            const t = (j + 1) / (k + 1);
+            placements.push({ position: r.start + t * (r.end - r.start), unitType: 'riffle', unitIdx: r.idx });
+          }
+        });
+      }
+      state.substrateCrossSections = placements.slice(0, 6);
+      render();
+      toast(`Suggested placement: ${state.substrateCrossSections.length} cross-sections distributed across riffles.`, 'info', 4000);
+    };
+
+    // Help panel
+    const help = c.querySelector('#sub-help');
+    if (state.substrateCrossSections.length === 6) {
+      // Score
+      const inRiffle = state.substrateCrossSections.filter(cs => cs.unitType === 'riffle').length;
+      help.innerHTML = `
+        <div style="border-left: 3px solid var(--green-ok); padding: 12px 16px; background: rgba(74,125,61,0.08);">
+          <b>Cross-sections placed.</b> ${inRiffle}/6 in riffles. Each one will get 5 particle picks.
+          <button class="btn btn-primary" style="margin-left: 16px;" onclick="window.__startSampling()">Begin particle sampling →</button>
+        </div>
+      `;
+      window.__startSampling = () => {
+        // Move on to sample phase
+        // We just trigger a re-render — phase auto-advances when length === 6 AND user clicks button
+        // Simplest: stash a flag
+        state._samplingStarted = true;
+        render();
+      };
+    }
+  }, 0);
+  return c;
+}
+
+function substrateSamplePanel() {
+  const c = document.createElement('div');
+  c.className = 'panel';
+  c.style.cssText = 'padding: 22px;';
+
+  const PICKS_PER_CS = 5; // reduced from 11 for pacing; concept is identical
+
+  // Determine current cross-section: first one that has < PICKS_PER_CS picks
+  const csIdx = state.substrateCrossSections.findIndex((cs, i) => {
+    const picks = state.substratePicks.filter(p => p.cs === i);
+    return picks.length < PICKS_PER_CS;
+  });
+
+  const allDone = csIdx === -1;
+  const currentCS = !allDone ? state.substrateCrossSections[csIdx] : null;
+  const currentPicks = !allDone ? state.substratePicks.filter(p => p.cs === csIdx) : [];
+
+  if (allDone) {
+    // Compute D50 etc.
+    const allSizes = state.substratePicks.map(p => p.size_class);
+    const counts = {};
+    SIZE_CLASSES.forEach(sc => counts[sc.label] = 0);
+    allSizes.forEach(s => counts[s] = (counts[s] || 0) + 1);
+    const meanFinesPct = (() => {
+      const cobblePicks = state.substratePicks.filter(p => p.embeddedness != null);
+      if (!cobblePicks.length) return null;
+      return cobblePicks.reduce((a,b) => a + b.embeddedness, 0) / cobblePicks.length;
+    })();
+
+    state.substrateComplete = true;
+    state.score.substrate = 100;
+    if (meanFinesPct != null) state.scoreNotes.substrate.push(`Mean cobble embeddedness: ${meanFinesPct.toFixed(1)}%`);
+    state.scoreNotes.substrate.push(`${state.substratePicks.length} particles measured across ${state.substrateCrossSections.length} cross-sections.`);
+
+    // Histogram
+    let bars = '';
+    const maxCount = Math.max(...Object.values(counts));
+    SIZE_CLASSES.forEach((sc, i) => {
+      const ct = counts[sc.label];
+      const h = maxCount > 0 ? (ct / maxCount) * 120 : 0;
+      bars += `
+        <div style="display: flex; flex-direction: column; align-items: center; flex: 1;">
+          <div style="height: 130px; display: flex; align-items: flex-end; width: 100%; justify-content: center;">
+            <div style="width: 70%; height: ${h}px; background: ${sc.color}; border: 1px solid var(--ink); display: flex; align-items: flex-start; justify-content: center; padding-top: 2px; color: ${sc.label === 'fines' || sc.label === 'sand' || sc.label === '4' || sc.label === '8' ? 'var(--ink)' : 'var(--paper)'}; font-family: 'JetBrains Mono'; font-size: 9px; font-weight: 600;">${ct > 0 ? ct : ''}</div>
+          </div>
+          <div style="font-family: 'JetBrains Mono'; font-size: 9px; margin-top: 4px; transform: rotate(-30deg); transform-origin: top left;">${sc.label}</div>
+        </div>
+      `;
+    });
+
+    c.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 class="display" style="margin: 0; font-size: 22px;">Substrate · summary</h3>
+        <span class="tag" style="color: var(--rust);">stage 04 — complete</span>
+      </div>
+      <p style="font-size: 14px; color: var(--ink-soft); line-height: 1.5;">${state.substratePicks.length} particles measured across 6 cross-sections. Particle size distribution:</p>
+      <div style="display: flex; gap: 4px; align-items: flex-end; padding: 10px 0 36px; border-bottom: 1.5px solid var(--ink);">
+        ${bars}
+      </div>
+      ${meanFinesPct != null ? `
+      <div style="margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+        <div style="border-left: 4px solid var(--rust); padding: 10px 14px; background: rgba(180,71,31,0.06);">
+          <div style="font-family: 'JetBrains Mono'; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--rust);">Mean cobble embeddedness</div>
+          <div class="display" style="font-size: 32px; margin-top: 4px;">${meanFinesPct.toFixed(1)}%</div>
+        </div>
+        <div style="border-left: 4px solid var(--gold); padding: 10px 14px; background: rgba(192,138,42,0.06);">
+          <div style="font-family: 'JetBrains Mono'; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold);">Note</div>
+          <div style="font-size: 13px; line-height: 1.5; margin-top: 4px;">High embeddedness = fine sediment filling cobble interstices = poor for fish/insects. ${meanFinesPct > 30 ? 'This site shows elevated fine-sediment loading.' : 'This site has reasonable interstitial space.'}</div>
+        </div>
+      </div>
+      ` : ''}
+      <div style="margin-top: 22px; text-align: right;">
+        <button class="btn btn-primary" onclick="goStage('undercut')">Continue to Undercut Banks →</button>
+      </div>
+    `;
+    return c;
+  }
+
+  // Sampling phase: pick 11 particles per cross-section
+  const next = currentPicks.length;
+  // For each pick, generate a random "blind-grab" particle
+  // Difficulty: user has to classify with the gravelometer (compare to bins)
+
+  c.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
+      <h3 class="display" style="margin: 0; font-size: 22px;">
+        Substrate · sampling
+        <span style="color: var(--ink-faint); font-size: 16px; font-style: italic;">CS${csIdx+1} of 6 · point ${next+1}/${PICKS_PER_CS}</span>
+      </h3>
+      <div style="display: flex; gap: 6px;">
+        ${state.substrateCrossSections.map((cs, i) => {
+          const picks = state.substratePicks.filter(p => p.cs === i).length;
+          const done = picks === PICKS_PER_CS;
+          const current = i === csIdx;
+          return `<div style="border: 1.5px solid ${done ? 'var(--green-ok)' : (current ? 'var(--rust)' : 'var(--ink-faint)')}; padding: 4px 8px; font-family: 'JetBrains Mono'; font-size: 11px; ${done ? 'background: var(--green-ok); color: white;' : (current ? 'background: var(--rust); color: white;' : '')}">CS${i+1}: ${picks}/${PICKS_PER_CS}</div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div id="sub-game" style="margin-top: 12px;"></div>
+  `;
+
+  setTimeout(() => {
+    const game = c.querySelector('#sub-game');
+    drawParticleGame(game, csIdx, next);
+  }, 0);
+
+  return c;
+}
+
+// Generate a "next particle" for the user to classify
+function generateParticle(csIdx, pointIdx) {
+  // Use a deterministic seed-ish approach
+  const seed = csIdx * 13 + pointIdx * 7 + 3;
+  // Riffles tend to have larger substrate; runs medium; pools finer
+  const cs = state.substrateCrossSections[csIdx];
+  const baseLogSize = cs.unitType === 'riffle' ? 4.2 : cs.unitType === 'run' ? 3.5 : 2.0; // log2 of size in mm
+  const variance = 1.6;
+  // Use seedrandom-like approach
+  const rand = () => {
+    const x = Math.sin(seed * 9.7 + pointIdx * 11.3 + csIdx * 17.1) * 10000;
+    return x - Math.floor(x);
+  };
+  const r1 = rand();
+  const r2 = (Math.sin(seed * 5.5 + 1.3) * 10000) % 1;
+  let logSize = baseLogSize + (r1 - 0.5) * 2 * variance;
+  let size = Math.pow(2, logSize);
+  // Occasionally bedrock
+  if (r2 > 0.95) return { kind: 'bedrock', size: 9999, true_class: 'bedrock' };
+  if (size < 0.5) size = 0.5;
+
+  // Determine TRUE size class
+  let trueClass = '>180';
+  for (const sc of SIZE_CLASSES) {
+    if (sc.label === 'bedrock') continue;
+    if (size <= sc.max) {
+      if (sc.label === 'fines' && size < 2) trueClass = (r1 > 0.5 ? 'fines' : 'sand');
+      else trueClass = sc.label;
+      break;
+    }
+  }
+  return { kind: 'particle', size, true_class: trueClass };
+}
+
+function drawParticleGame(container, csIdx, pointIdx) {
+  const particle = generateParticle(csIdx, pointIdx);
+
+  // Two-column: left = particle visual + gravelometer, right = controls
+  container.innerHTML = `
+    <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px;">
+      <div>
+        <div style="background: linear-gradient(180deg, #d4c094, #c0a878); border: 1.5px solid var(--ink); padding: 30px; min-height: 300px; position: relative;">
+          <div style="position: absolute; top: 8px; left: 12px; font-family: 'JetBrains Mono'; font-size: 10px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.1em;">in your hand</div>
+          ${particle.kind === 'bedrock' ? `
+            <div style="margin-top: 30px; text-align: center;">
+              <svg viewBox="0 0 200 80" style="width: 90%; max-width: 360px;">
+                <path d="M 0 60 Q 30 50 50 55 T 100 50 T 150 58 T 200 55 L 200 80 L 0 80 Z" fill="${'#383812'}" stroke="${'#2a2418'}" stroke-width="1.5"/>
+                <text x="100" y="40" text-anchor="middle" font-family="JetBrains Mono" font-size="14" font-weight="600" fill="${'#2a2418'}">solid bedrock — can't pick up</text>
+              </svg>
+            </div>
+          ` : drawParticleSVG(particle.size)}
+        </div>
+        <div style="margin-top: 14px; padding: 14px 16px; background: rgba(192,138,42,0.08); border-left: 3px solid var(--gold); font-size: 13px; line-height: 1.5;">
+          <b style="color: var(--gold); text-transform: uppercase; font-size: 11px; font-family: 'JetBrains Mono'; letter-spacing: 0.1em;">Method</b><br/>
+          ${particle.kind === 'bedrock' ? 'You hit solid bedrock — there is no particle to pick up. Record "bedrock".' : `Point #${pointIdx+1} of 5 at this cross-section. Look away, drop your finger to the bed, pick up the first particle you feel. Use the gravelometer to find the smallest opening it <i>does not</i> fit through — that's its size class.`}
+        </div>
+      </div>
+      <div>
+        <h5 style="margin: 0 0 10px; font-family: 'JetBrains Mono'; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;">Gravelometer</h5>
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          ${SIZE_CLASSES.map(sc => `
+            <button onclick="window.__pickSize('${sc.label}')"
+                    style="display: flex; justify-content: space-between; align-items: center; gap: 10px;
+                           padding: 8px 12px; border: 1.5px solid var(--ink); background: ${sc.color}; color: ${['fines','sand','4','8'].includes(sc.label) ? 'var(--ink)' : 'var(--paper)'};
+                           font-family: 'JetBrains Mono'; font-size: 11px; cursor: pointer; transition: transform 0.1s;
+                           ${particle.kind === 'bedrock' && sc.label !== 'bedrock' ? 'opacity: 0.4;' : ''}"
+                    onmouseover="this.style.transform='translateX(4px)'" onmouseout="this.style.transform='translateX(0)'">
+              <span>${sc.label}${sc.label !== 'bedrock' && sc.label !== 'fines' && sc.label !== 'sand' && sc.label !== '>180' ? ' mm' : ''}</span>
+              <span style="font-size: 10px; opacity: 0.7;">${sc.label === 'fines' ? '<2mm smooth' : sc.label === 'sand' ? '<2mm gritty' : sc.label === '>180' ? '> 180' : sc.label === 'bedrock' ? 'in place' : '≤ ' + sc.max + 'mm'}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  window.__pickSize = (label) => {
+    if (particle.kind === 'bedrock' && label !== 'bedrock') {
+      toast('That looked like bedrock — record "bedrock".', 'bad', 2500);
+      return;
+    }
+    if (label === 'bedrock' && particle.kind !== 'bedrock') {
+      toast('It\'s a particle, not bedrock — try again.', 'bad', 2200);
+      return;
+    }
+    const correct = label === particle.true_class || (label === 'sand' && particle.true_class === 'fines') || (label === 'fines' && particle.true_class === 'sand');
+    // Check if cobble class for embeddedness
+    const isCobble = ['64','90','128','180'].includes(label);
+    const pick = {
+      cs: csIdx, point: pointIdx,
+      size_class: label,
+      true_class: particle.true_class,
+      true_size: particle.size,
+      correct,
+    };
+
+    if (isCobble && particle.kind !== 'bedrock') {
+      // Show embeddedness modal
+      showEmbeddedness((buried, fines) => {
+        pick.percent_buried = buried;
+        pick.percent_fines = fines;
+        pick.embeddedness = (buried/100) * fines;
+        state.substratePicks.push(pick);
+        if (correct) toast(`✓ Recorded ${label}. Embeddedness: ${pick.embeddedness.toFixed(0)}%`, 'ok', 2200);
+        else toast(`Recorded as ${label}. <i>Actual: ${particle.true_class}</i>. Embeddedness: ${pick.embeddedness.toFixed(0)}%`, 'info', 3200);
+        render();
+      });
+    } else {
+      state.substratePicks.push(pick);
+      if (correct) toast(`✓ Correct — ${label}.`, 'ok', 1800);
+      else toast(`Recorded as <b>${label}</b>. Actual size class: <b>${particle.true_class}</b> (${particle.size.toFixed(1)} mm)`, 'info', 3000);
+      render();
+    }
+  };
+}
+
+function drawParticleSVG(sizeMm) {
+  // Visualize particle. Scale: 1mm = 1px, capped to a sensible viewport
+  const px = Math.min(180, Math.max(8, sizeMm * 1.4));
+  // Generate a blobby polygon
+  const N = 12;
+  const pts = [];
+  for (let i = 0; i < N; i++) {
+    const ang = (i / N) * Math.PI * 2;
+    const r = px/2 * (0.85 + 0.18 * Math.sin(ang*3 + sizeMm * 0.3) + 0.1 * Math.cos(ang * 4));
+    pts.push([Math.cos(ang) * r, Math.sin(ang) * r]);
+  }
+  const path = pts.map((p, i) => `${i===0?'M':'L'} ${p[0]} ${p[1]}`).join(' ') + ' Z';
+  // Color: bigger = darker
+  const sc = SIZE_CLASSES.find(s => sizeMm <= s.max) || SIZE_CLASSES[10];
+  return `
+    <svg viewBox="-100 -100 200 200" style="width: 70%; max-width: 320px; display: block; margin: 12px auto;">
+      <defs>
+        <radialGradient id="rock-grad" cx="0.4" cy="0.3">
+          <stop offset="0%" stop-color="${sc.color}" stop-opacity="0.9"/>
+          <stop offset="100%" stop-color="${'#2a2418'}" stop-opacity="0.95"/>
+        </radialGradient>
+      </defs>
+      <path d="${path}" fill="url(#rock-grad)" stroke="${'#2a2418'}" stroke-width="1.5"/>
+      ${[...Array(8)].map((_,i) => {
+        const ang = i / 8 * Math.PI * 2 + sizeMm * 0.1;
+        const r = px/2 * 0.5 * (0.6 + 0.4 * Math.sin(ang * 3));
+        return `<circle cx="${Math.cos(ang)*r*0.7}" cy="${Math.sin(ang)*r*0.7}" r="${1.5 + (i%3)}" fill="${'#2a2418'}" opacity="${0.18 + 0.1 * Math.sin(ang*5)}"/>`;
+      }).join('')}
+      <!-- ruler bottom -->
+      <line x1="-${px/2}" y1="${px/2 + 14}" x2="${px/2}" y2="${px/2 + 14}" stroke="${'#2a2418'}" stroke-width="1"/>
+      <line x1="-${px/2}" y1="${px/2 + 11}" x2="-${px/2}" y2="${px/2 + 17}" stroke="${'#2a2418'}" stroke-width="1"/>
+      <line x1="${px/2}" y1="${px/2 + 11}" x2="${px/2}" y2="${px/2 + 17}" stroke="${'#2a2418'}" stroke-width="1"/>
+      <text x="0" y="${px/2 + 28}" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="${'#2a2418'}">${sizeMm.toFixed(1)} mm</text>
+    </svg>
+  `;
+}
+
+function showEmbeddedness(callback) {
+  // Modal overlay
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `position: fixed; inset: 0; background: rgba(40,30,10,0.6); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px;`;
+  let buried = 30, fines = 50;
+
+  function rerender() {
+    const buriedFrac = buried / 100;
+    const finesFrac = fines / 100;
+    overlay.innerHTML = `
+      <div class="panel" style="max-width: 540px; width: 100%; padding: 28px;">
+        <h3 class="display" style="margin: 0 0 8px; font-size: 24px;">Cobble embeddedness</h3>
+        <p style="margin: 0 0 18px; font-size: 13px; color: var(--ink-soft); line-height: 1.5;">
+          For cobble-class particles (64–180 mm), estimate two things in the field:
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px;">
+          <div>
+            <div style="font-family: 'JetBrains Mono'; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px;">% Buried</div>
+            <svg viewBox="0 0 100 100" style="width: 100%; background: ${'#a89070'}; border: 1.5px solid var(--ink);">
+              <rect x="0" y="${50}" width="100" height="50" fill="${'#876e4e'}"/>
+              <line x1="0" y1="50" x2="100" y2="50" stroke="${'#5a4f38'}" stroke-width="1" stroke-dasharray="3 2"/>
+              <ellipse cx="50" cy="${50 - 28 + buriedFrac * 56}" rx="32" ry="28" fill="${'#585020'}" stroke="${'#2a2418'}" stroke-width="1.5"/>
+              <text x="50" y="14" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="${'#fdfaf0'}" font-weight="600">streambed surface ↑</text>
+            </svg>
+            <input type="range" min="0" max="100" step="5" value="${buried}" oninput="window.__updBur(this.value)" style="width: 100%; margin-top: 8px;"/>
+            <div style="text-align: center; font-family: 'JetBrains Mono'; font-size: 18px; font-weight: 600;">${buried}%</div>
+          </div>
+          <div>
+            <div style="font-family: 'JetBrains Mono'; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px;">% Fines around it</div>
+            <svg viewBox="0 0 100 100" style="width: 100%; background: ${'#876e4e'}; border: 1.5px solid var(--ink);">
+              ${(() => {
+                let dots = '';
+                const nFines = Math.round(finesFrac * 60);
+                const nCoarse = 60 - nFines;
+                for (let i = 0; i < nFines; i++) {
+                  const x = ((i * 7.3) % 95) + 2.5;
+                  const y = ((i * 11.7) % 95) + 2.5;
+                  dots += `<circle cx="${x}" cy="${y}" r="1.2" fill="${'#c08a2a'}" opacity="0.85"/>`;
+                }
+                for (let i = 0; i < nCoarse; i++) {
+                  const x = ((i * 5.1 + 3) % 95) + 2.5;
+                  const y = ((i * 13.3 + 5) % 95) + 2.5;
+                  dots += `<circle cx="${x}" cy="${y}" r="2.5" fill="${'#585020'}" opacity="0.85"/>`;
+                }
+                return dots;
+              })()}
+              <circle cx="50" cy="50" r="14" fill="${'#383812'}" stroke="${'#2a2418'}" stroke-width="1.5"/>
+              <text x="50" y="54" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="${'#fdfaf0'}" font-weight="600">cobble</text>
+            </svg>
+            <input type="range" min="0" max="100" step="5" value="${fines}" oninput="window.__updFines(this.value)" style="width: 100%; margin-top: 8px;"/>
+            <div style="text-align: center; font-family: 'JetBrains Mono'; font-size: 18px; font-weight: 600;">${fines}%</div>
+          </div>
+        </div>
+        <div style="margin-top: 18px; padding: 10px 14px; background: rgba(74,104,120,0.08); border-left: 3px solid var(--water); font-size: 13px;">
+          Embeddedness = % buried × % fines / 100 = <b>${((buriedFrac * fines)).toFixed(1)}%</b>
+        </div>
+        <div style="margin-top: 18px; display: flex; gap: 10px; justify-content: flex-end;">
+          <button class="btn" onclick="window.__embCancel()">Skip (0%)</button>
+          <button class="btn btn-primary" onclick="window.__embOK()">Record</button>
+        </div>
+      </div>
+    `;
+    window.__updBur = v => { buried = +v; rerender(); };
+    window.__updFines = v => { fines = +v; rerender(); };
+    window.__embOK = () => { overlay.remove(); callback(buried, fines); };
+    window.__embCancel = () => { overlay.remove(); callback(0, 0); };
+  }
+  rerender();
+  document.body.appendChild(overlay);
+}
+
+// =====================================================================
+// STAGE 5: UNDERCUT BANKS
+// =====================================================================
+// Show several candidate undercut banks. User decides which qualify.
+
+const CANDIDATE_UNDERCUTS = [
+  { id: 1, length: 1.4, depth_avg: 35, ceiling: 0.6, w25: 32, w50: 38, w75: 35, fish_cover: true, bank: 'L', unit: 3, position: 0.28 },
+  { id: 2, length: 0.7, depth_avg: 40, ceiling: 0.5, w25: 45, w50: 38, w75: 36, fish_cover: true, bank: 'R', unit: 4, position: 0.38 },
+  { id: 3, length: 1.6, depth_avg: 18, ceiling: 0.7, w25: 22, w50: 18, w75: 14, fish_cover: true, bank: 'L', unit: 6, position: 0.62 },
+  { id: 4, length: 1.1, depth_avg: 45, ceiling: 1.4, w25: 48, w50: 45, w75: 42, fish_cover: true, bank: 'R', unit: 7, position: 0.72 },
+  { id: 5, length: 1.2, depth_avg: 28, ceiling: 0.4, w25: 30, w50: 26, w75: 28, fish_cover: false, bank: 'L', unit: 8, position: 0.83 },
+  { id: 6, length: 2.1, depth_avg: 30, ceiling: 0.55, w25: 32, w50: 30, w75: 28, fish_cover: true, bank: 'R', unit: 9, position: 0.95 },
+];
+
+function trueQualifies(u) {
+  return u.length >= 1.0 && u.depth_avg >= 20 && u.ceiling <= 1.0 && u.fish_cover;
+}
+
+function stageUndercut() {
+  const el = document.createElement('div');
+
+  // Show all candidates as cards; user judges each
+  const cards = CANDIDATE_UNDERCUTS.map(u => {
+    const decision = state.undercutDecisions.find(d => d.id === u.id);
+    return undercutCard(u, decision);
+  });
+
+  el.innerHTML = `
+    <div class="panel" style="padding: 22px; margin-bottom: 18px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h3 class="display" style="margin: 0; font-size: 22px;">Undercut Banks · qualify each candidate</h3>
+        <span class="tag" style="color: var(--rust);">stage 05</span>
+      </div>
+      <p style="font-size: 14px; color: var(--ink-soft); line-height: 1.6; margin: 0;">
+        An undercut qualifies as fish habitat only if all of these are true:
+        depth ≥ <b>20 cm</b>, length ≥ <b>1 m</b>, ceiling ≤ <b>1 m</b> above water, and it provides cover at sampling time.
+        Your job: read each candidate's measurements and decide whether to <b>record</b> or <b>skip</b>.
+      </p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;" id="uc-grid">
+      ${cards.join('')}
+    </div>
+    <div id="uc-action" style="margin-top: 22px;"></div>
+  `;
+
+  setTimeout(() => {
+    window.__decideUC = (id, qualifies) => {
+      const u = CANDIDATE_UNDERCUTS.find(x => x.id === id);
+      const correct = (qualifies ? trueQualifies(u) : !trueQualifies(u));
+      const existing = state.undercutDecisions.findIndex(d => d.id === id);
+      const decision = { id, qualifies, correct };
+      if (existing >= 0) state.undercutDecisions[existing] = decision;
+      else state.undercutDecisions.push(decision);
+      render();
+    };
+    window.__finishUC = () => {
+      const correct = state.undercutDecisions.filter(d => d.correct).length;
+      const total = CANDIDATE_UNDERCUTS.length;
+      const pct = (correct/total)*100;
+      state.undercutComplete = true;
+      state.score.undercut = Math.round(pct);
+      state.scoreNotes.undercut.push(`${correct}/${total} undercuts evaluated correctly (${pct.toFixed(0)}%).`);
+      render();
+    };
+
+    const action = el.querySelector('#uc-action');
+    if (state.undercutDecisions.length === CANDIDATE_UNDERCUTS.length && !state.undercutComplete) {
+      action.innerHTML = `<div style="text-align: right;"><button class="btn btn-primary" onclick="window.__finishUC()">Score undercuts →</button></div>`;
+    } else if (state.undercutComplete) {
+      const correct = state.undercutDecisions.filter(d => d.correct).length;
+      action.innerHTML = `
+        <div class="panel" style="padding: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+          <div>
+            <div style="font-family: 'JetBrains Mono'; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft);">Result</div>
+            <div class="display" style="font-size: 28px;">${correct}/${CANDIDATE_UNDERCUTS.length} correct decisions</div>
+            <div style="font-size: 13px; color: var(--ink-soft); margin-top: 4px;">
+              ${(() => {
+                const wrong = state.undercutDecisions.filter(d => !d.correct);
+                if (wrong.length === 0) return 'Every candidate evaluated correctly — well-read protocol.';
+                return 'Misses: ' + wrong.map(d => {
+                  const u = CANDIDATE_UNDERCUTS.find(x => x.id === d.id);
+                  const reasons = [];
+                  if (u.length < 1.0) reasons.push('length < 1m');
+                  if (u.depth_avg < 20) reasons.push('depth < 20cm');
+                  if (u.ceiling > 1.0) reasons.push('ceiling > 1m');
+                  if (!u.fish_cover) reasons.push('no cover');
+                  return `#${d.id} (${reasons.length ? reasons.join(', ') : 'qualifies — ' + u.length + 'm long, ' + u.depth_avg + 'cm deep'})`;
+                }).join('; ');
+              })()}
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="goStage('summary')">View field report →</button>
+        </div>
+      `;
+    }
+  }, 0);
+
+  return el;
+}
+
+function undercutCard(u, decision) {
+  const reasons = [];
+  if (u.length < 1.0) reasons.push({ ok: false, txt: `length ${u.length} m`, req: '≥ 1.0' });
+  else reasons.push({ ok: true, txt: `length ${u.length} m`, req: '≥ 1.0' });
+  if (u.depth_avg < 20) reasons.push({ ok: false, txt: `depth ${u.depth_avg} cm`, req: '≥ 20' });
+  else reasons.push({ ok: true, txt: `depth ${u.depth_avg} cm`, req: '≥ 20' });
+  if (u.ceiling > 1.0) reasons.push({ ok: false, txt: `ceiling ${u.ceiling} m`, req: '≤ 1.0' });
+  else reasons.push({ ok: true, txt: `ceiling ${u.ceiling} m`, req: '≤ 1.0' });
+  reasons.push({ ok: u.fish_cover, txt: u.fish_cover ? 'provides cover' : 'NO cover', req: 'must' });
+
+  const trueQ = trueQualifies(u);
+  const userDecided = !!decision;
+
+  // Side-view sketch: shows water surface, bank lip with overhang, undercut depth, ceiling height
+  // Coordinate scaling: 1 cm = 1 px-ish, ceiling in meters → cm
+  const ceilingPx = u.ceiling * 60;       // ceiling height in px
+  const depthPx = u.depth_avg * 1.5;       // undercut depth (back of cave) in px
+  const waterY = 100;
+  const lipY = waterY - ceilingPx;         // lip of the undercut
+  const bankLeft = 30;
+  const undercutBackX = bankLeft + depthPx;
+
+  return `
+    <div class="panel hover-lift" style="padding: 14px; ${userDecided ? `border-left: 6px solid ${decision.correct ? 'var(--green-ok)' : 'var(--red-bad)'};` : ''}">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px;">
+        <h4 class="display" style="margin: 0; font-size: 18px;">Candidate #${u.id}</h4>
+        <span style="font-family: 'JetBrains Mono'; font-size: 10px; color: var(--ink-faint);">unit ${u.unit} · ${u.bank} bank</span>
+      </div>
+      <!-- Cross-section sketch (side view, looking downstream) -->
+      <svg viewBox="0 0 240 130" style="width: 100%; background: linear-gradient(180deg, #f0e8d6 0%, #d4c094 60%); border: 1px solid var(--ink-faint);">
+        <defs>
+          <pattern id="bank-tex-${u.id}" width="6" height="6" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="0.6" fill="#5a4f38" opacity="0.4"/>
+            <circle cx="4" cy="4" r="0.5" fill="#5a4f38" opacity="0.3"/>
+          </pattern>
+        </defs>
+        <!-- Bank earth (above the undercut and behind it) -->
+        <path d="M 0 0 L 240 0 L 240 ${waterY} L ${undercutBackX} ${waterY} L ${undercutBackX} ${lipY} L ${bankLeft} ${lipY} L ${bankLeft} 0 Z"
+              fill="#a89070"/>
+        <path d="M 0 0 L 240 0 L 240 ${waterY} L ${undercutBackX} ${waterY} L ${undercutBackX} ${lipY} L ${bankLeft} ${lipY} L ${bankLeft} 0 Z"
+              fill="url(#bank-tex-${u.id})"/>
+        <!-- Bank below water surface (behind undercut back wall) -->
+        <rect x="${undercutBackX}" y="${waterY}" width="${240 - undercutBackX}" height="${130 - waterY}" fill="#876e4e"/>
+        <!-- Water (in the undercut + to the right) -->
+        <rect x="${bankLeft}" y="${waterY - 4}" width="${240 - bankLeft}" height="${130 - waterY + 4}" fill="url(#cs-water-grad)" opacity="0.9"/>
+        <!-- Re-overlay bank lip so water is "under" the overhang -->
+        <path d="M 0 0 L ${bankLeft} 0 L ${bankLeft} ${lipY} L ${undercutBackX} ${lipY} Q ${undercutBackX + 8} ${lipY + 4} ${undercutBackX} ${waterY - 2} L ${undercutBackX} ${130} L 0 ${130} Z"
+              fill="#a89070"/>
+        <!-- Water fill in the undercut cavity -->
+        <rect x="${bankLeft}" y="${lipY}" width="${depthPx}" height="${waterY - lipY}" fill="#4a6878" opacity="0.55"/>
+        <!-- Water surface -->
+        <line x1="${bankLeft}" y1="${waterY}" x2="240" y2="${waterY}" stroke="#fdfaf0" stroke-width="0.8" opacity="0.85" stroke-dasharray="2 2"/>
+        <!-- Undercut back wall outline -->
+        <line x1="${undercutBackX}" y1="${lipY}" x2="${undercutBackX}" y2="${waterY}" stroke="#5a4f38" stroke-width="1"/>
+        <line x1="${bankLeft}" y1="${lipY}" x2="${undercutBackX}" y2="${lipY}" stroke="#5a4f38" stroke-width="1"/>
+
+        <!-- Dimension: depth (horizontal arrow) -->
+        <g stroke="#b4471f" stroke-width="0.8" fill="#b4471f">
+          <line x1="${bankLeft}" y1="${(lipY + waterY)/2}" x2="${undercutBackX}" y2="${(lipY + waterY)/2}"/>
+          <polygon points="${bankLeft},${(lipY+waterY)/2} ${bankLeft+4},${(lipY+waterY)/2 - 2} ${bankLeft+4},${(lipY+waterY)/2 + 2}"/>
+          <polygon points="${undercutBackX},${(lipY+waterY)/2} ${undercutBackX-4},${(lipY+waterY)/2 - 2} ${undercutBackX-4},${(lipY+waterY)/2 + 2}"/>
+          <text x="${(bankLeft + undercutBackX)/2}" y="${(lipY + waterY)/2 - 4}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#b4471f" stroke="none">${u.depth_avg} cm</text>
+        </g>
+        <!-- Dimension: ceiling (vertical arrow) -->
+        <g stroke="#2a2418" stroke-width="0.8" fill="#2a2418">
+          <line x1="14" y1="${lipY}" x2="14" y2="${waterY}"/>
+          <polygon points="14,${lipY} 12,${lipY+4} 16,${lipY+4}"/>
+          <polygon points="14,${waterY} 12,${waterY-4} 16,${waterY-4}"/>
+          <text x="2" y="${(lipY+waterY)/2 + 3}" font-family="JetBrains Mono" font-size="9" fill="#2a2418" stroke="none">${u.ceiling}m</text>
+        </g>
+        <!-- Length annotation -->
+        <text x="120" y="123" text-anchor="middle" font-family="Caveat" font-size="14" fill="#2a2418">length: ${u.length} m (along edge)</text>
+        <!-- Cover indicator -->
+        ${u.fish_cover ? `<text x="${bankLeft + depthPx/2}" y="${waterY + 16}" text-anchor="middle" font-size="14">🐟</text>` : ''}
+      </svg>
+      <!-- Criteria checklist -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin: 12px 0;">
+        ${reasons.map(r => `
+          <div style="display: flex; gap: 6px; font-size: 12px; align-items: center; color: ${r.ok ? 'var(--green-ok)' : 'var(--red-bad)'};">
+            <span style="font-weight: 700;">${r.ok ? '✓' : '✗'}</span>
+            <span>${r.txt}</span>
+            ${r.req !== 'must' ? `<span style="color: var(--ink-faint); font-size: 10px;">(${r.req})</span>` : ''}
+          </div>
+        `).join('')}
+      </div>
+      <div style="display: flex; gap: 6px;">
+        <button class="btn ${userDecided && decision.qualifies ? 'btn-primary' : ''}"
+                style="flex: 1; padding: 6px 10px; font-size: 10px; ${userDecided && !decision.qualifies ? 'opacity: 0.5;' : ''}"
+                onclick="window.__decideUC(${u.id}, true)">Record</button>
+        <button class="btn ${userDecided && !decision.qualifies ? 'btn-primary' : ''}"
+                style="flex: 1; padding: 6px 10px; font-size: 10px; ${userDecided && decision.qualifies ? 'opacity: 0.5;' : ''}"
+                onclick="window.__decideUC(${u.id}, false)">Skip</button>
+      </div>
+      ${userDecided ? `
+        <div style="margin-top: 10px; padding: 6px 10px; font-size: 11px; background: ${decision.correct ? 'rgba(74,125,61,0.12)' : 'rgba(168,58,44,0.12)'}; border-left: 3px solid ${decision.correct ? 'var(--green-ok)' : 'var(--red-bad)'};">
+          ${decision.correct ? '✓ Correct.' : `✗ Should ${trueQ ? 'be recorded' : 'be skipped'}.`}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+// Helper: shared water gradient for cards
+(function injectSharedGradient() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', '0'); svg.setAttribute('height', '0');
+  svg.style.position = 'absolute';
+  svg.innerHTML = `<defs>
+    <linearGradient id="cs-water-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5a7e90"/>
+      <stop offset="100%" stop-color="#2c4654"/>
+    </linearGradient>
+  </defs>`;
+  document.body.appendChild(svg);
+})();
+
+// =====================================================================
+// SUMMARY / FIELD REPORT
+// =====================================================================
+function stageSummary() {
+  const el = document.createElement('div');
+
+  const total = Object.values(state.score).reduce((a,b) => a+b, 0);
+  const max = 5 * 100;
+  const pct = total / max * 100;
+
+  // BFW summary
+  const avgBfw = state.bankfullMeasurements.length === 5 ? (state.bankfullMeasurements.reduce((a,b)=>a+b.value,0)/5).toFixed(2) : '—';
+  const meanCsDepth = state.csMeasurements.length === 11
+    ? (state.csMeasurements.reduce((a,b)=>a+b.bf_depth, 0)/11).toFixed(2)
+    : '—';
+  const cobblePicks = state.substratePicks.filter(p => p.embeddedness != null);
+  const meanEmb = cobblePicks.length ? (cobblePicks.reduce((a,b)=>a+b.embeddedness,0)/cobblePicks.length).toFixed(1) : '—';
+  const ucOK = state.undercutDecisions.filter(d => d.qualifies && d.correct).length;
+
+  el.innerHTML = `
+    <div class="panel" style="padding: 36px; position: relative; margin-bottom: 24px;">
+      <div style="position: absolute; top: 14px; right: 24px; transform: rotate(8deg);" class="stamp">FIELD REPORT</div>
+      <div style="font-family: 'JetBrains Mono'; font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink-faint); margin-bottom: 6px;">
+        Habitat assessment summary · ${formatToday()}
+      </div>
+      <h2 class="display" style="font-size: 44px; margin: 0; line-height: 1;">Coyote Creek <span style="color: var(--rust);">03-A</span></h2>
+      <p style="font-style: italic; color: var(--ink-soft); margin: 6px 0 22px; font-size: 16px;">Five-stage habitat assessment, single observer, training run.</p>
+
+      <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px;">
+        ${[
+          ['Avg BFW', avgBfw + ' m', 'site layout'],
+          ['Width category', (state.widthCategory ?? '—') + ' m', 'site layout'],
+          ['Mean BF depth', meanCsDepth + ' m', 'cross sect.'],
+          ['Mean embedd.', meanEmb + '%', 'substrate'],
+          ['Qual. undercuts', ucOK, 'undercut bks'],
+        ].map(([label, val, sub]) => `
+          <div style="border-top: 2px solid var(--ink); padding-top: 10px;">
+            <div style="font-family: 'JetBrains Mono'; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-faint);">${sub}</div>
+            <div style="font-family: 'JetBrains Mono'; font-size: 12px; color: var(--ink-soft); margin-top: 2px;">${label}</div>
+            <div class="display" style="font-size: 26px; margin-top: 4px;">${val}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <h3 class="display" style="font-size: 22px; margin: 0 0 12px;">Stage scores</h3>
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 28px;">
+        ${[
+          ['Site Layout', state.score.layout, state.scoreNotes.layout],
+          ['Cross Section', state.score.crosssection, state.scoreNotes.crosssection],
+          ['Channel Units', state.score.units, state.scoreNotes.units],
+          ['Substrate', state.score.substrate, state.scoreNotes.substrate],
+          ['Undercut Banks', state.score.undercut, state.scoreNotes.undercut],
+        ].map(([name, sc, notes]) => `
+          <div style="display: grid; grid-template-columns: 200px 100px 1fr; gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px dotted var(--ink-faint);">
+            <div style="font-family: 'JetBrains Mono'; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;">${name}</div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="flex: 1; height: 8px; background: var(--paper-shadow); border: 1px solid var(--ink); position: relative;">
+                <div style="position: absolute; left: 0; top: 0; bottom: 0; width: ${sc}%; background: ${sc >= 70 ? 'var(--green-ok)' : sc >= 40 ? 'var(--gold)' : 'var(--red-bad)'};"></div>
+              </div>
+              <span class="mono" style="font-size: 12px; font-weight: 600;">${sc}</span>
+            </div>
+            <div style="font-size: 12px; color: var(--ink-soft); font-style: italic;">${notes.length ? notes.join(' · ') : '—'}</div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div style="display: flex; gap: 16px; align-items: center; padding: 18px; background: ${pct >= 70 ? 'rgba(74,125,61,0.1)' : 'rgba(192,138,42,0.1)'}; border-left: 4px solid ${pct >= 70 ? 'var(--green-ok)' : 'var(--gold)'};">
+        <div class="display" style="font-size: 60px; line-height: 1; color: ${pct >= 70 ? 'var(--green-ok)' : 'var(--gold)'};">${Math.round(pct)}%</div>
+        <div>
+          <div style="font-family: 'JetBrains Mono'; font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink-soft);">Overall</div>
+          <div style="font-size: 16px; line-height: 1.4; margin-top: 4px;">
+            ${pct >= 90 ? `<b>Excellent work.</b> You'd be ready for solo fieldwork after a tag-along day with an experienced crew.` :
+              pct >= 70 ? `<b>Solid.</b> A few details to refine — review notes above.` :
+              pct >= 50 ? `<b>Decent first run.</b> Re-read the protocol on the weakest stage and try again.` :
+              `<b>Keep going.</b> The protocol takes practice; understand <i>why</i> each step exists, not just what to do.`}
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 28px; display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap;">
+        <button class="btn" onclick="window.__restart()">↺ Run again</button>
+        <button class="btn btn-primary" onclick="window.print()">⎙ Print report</button>
+      </div>
+    </div>
+
+    <div class="panel" style="padding: 22px;">
+      <h4 class="display" style="margin: 0 0 12px; font-size: 18px;">Reflection prompts</h4>
+      <p style="font-size: 13px; color: var(--ink-soft); margin: 0 0 14px; font-style: italic;">From the worksheets — useful to think through after the simulator:</p>
+      <ol style="font-family: 'Cormorant Garamond', serif; font-size: 16px; line-height: 1.7; padding-left: 22px;">
+        <li>Why might we conduct a habitat assessment in the first place?</li>
+        <li>What is a transect, and why do we use them?</li>
+        <li>How would your transect spacing differ between a 1 m headwater stream and a 20 m main-stem river? Why?</li>
+        <li>Why are <b>pools</b> important for salmon? Why are <b>riffles</b> important?</li>
+        <li>What is cobble embeddedness, and what does a high value tell you about the stream?</li>
+        <li>Why do undercut banks need to be <i>continuous</i> and provide <i>cover at sampling time</i>?</li>
+        <li>List sources of measurement error in this simulator. What did the simulator <i>not</i> show that you'd encounter in the field?</li>
+      </ol>
+    </div>
+  `;
+
+  setTimeout(() => {
+    window.__restart = () => {
+      // Hard reset
+      Object.assign(state, {
+        stage: 'intro',
+        bankfullMeasurements: [],
+        widthCategory: null,
+        transectsPlaced: 0,
+        transectsLocked: false,
+        csTransect: 1,
+        csMeasurements: [],
+        csComplete: false,
+        unitBoundaries: [0, 1.0],
+        unitClassifications: [],
+        unitsComplete: false,
+        substrateCrossSections: [],
+        substratePicks: [],
+        substrateComplete: false,
+        undercutDecisions: [],
+        undercutComplete: false,
+        score: { layout: 0, crosssection: 0, units: 0, substrate: 0, undercut: 0 },
+        scoreNotes: { layout: [], crosssection: [], units: [], substrate: [], undercut: [] },
+      });
+      render();
+    };
+  }, 0);
+  return el;
+}
+
+// =====================================================================
+// NAVIGATION
+// =====================================================================
+function goStage(name) {
+  state.stage = name;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  render();
+}
+window.goStage = goStage;
+
+// =====================================================================
+// GLOSSARY (accessible from header)
+// =====================================================================
+const GLOSSARY = [
+  { term: 'Bankfull', def: 'The elevation at which water just begins to overflow the channel onto the floodplain. Indicators: change in slope, top of point bars, vegetation lines, change in bank materials. Bankfull flow has a 1–2 year recurrence interval and does most channel-shaping work.' },
+  { term: 'Wetted channel', def: 'The portion of the streambed currently covered by water. Typically narrower than the bankfull channel.' },
+  { term: 'Thalweg', def: 'The line of deepest flow along the channel — usually where a fish would swim through.' },
+  { term: 'Cross section', def: 'A vertical slice across the channel perpendicular to flow. Measured at every odd transect with bankfull and wetted depths.' },
+  { term: 'Channel unit', def: 'A localized, relatively homogeneous area of channel — pool, riffle, or run — distinguished by gradient, bedform, substrate, and flow character. Tier I habitat type.' },
+  { term: 'Pool', def: 'Low gradient (<1%), smooth flow, lateral and longitudinal concavity (the bed dips in two directions). Cover and rest habitat.' },
+  { term: 'Riffle', def: 'Steeper gradient (>1%), coarse substrate (cobble/boulder), turbulent flow. Oxygenates water; supports invertebrates; prime spawning gravel.' },
+  { term: 'Run', def: 'Low gradient like a pool but uniform depth and no concavity. Smooth laminar flow. Travel corridor.' },
+  { term: 'Substrate', def: 'The bed material — sand, gravel, cobble, boulder, bedrock. Sized by b-axis with a gravelometer.' },
+  { term: 'B-axis', def: 'The intermediate of three orthogonal axes of a particle. Used because it determines what size opening the particle can pass through.' },
+  { term: 'Cobble embeddedness', def: 'How buried a cobble is in fine sediment. Calculated as % buried × % surrounding fines / 100. High embeddedness = poor habitat (less interstitial space for invertebrates and fish eggs).' },
+  { term: 'Fines', def: 'Particles < 2 mm. Silt and clay (smooth between fingers) classified as "fines"; sand (gritty) classified as "sand".' },
+  { term: 'Gravelometer', def: 'A template with square openings used to classify particle b-axis size. Particle is recorded as the smallest opening it does NOT fit through.' },
+  { term: 'Undercut bank', def: 'A continuous cave-like feature in the streambank formed by overhanging material. Qualifies if depth ≥ 20 cm, length ≥ 1 m, ceiling ≤ 1 m above water, and provides cover.' },
+  { term: 'BOS / TOS', def: 'Bottom Of Site / Top Of Site. Surveys work upstream from BOS to TOS so disturbance of the bed doesn\'t affect downstream measurements.' },
+  { term: 'Width category', def: 'A standardized bucket the site falls into based on average bankfull width (6, 8, 10, 12, 14, 16, 18, 20 m). Determines transect spacing and total reach length.' },
+];
+window.__openGlossary = () => {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(40,30,10,0.7); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadein 0.2s;';
+  overlay.innerHTML = `
+    <div class="panel" style="max-width: 780px; width: 100%; max-height: 85vh; overflow-y: auto; padding: 32px;" onclick="event.stopPropagation()">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px;">
+        <div>
+          <h2 class="display" style="margin: 0; font-size: 32px;">Glossary</h2>
+          <p style="margin: 4px 0 0; font-style: italic; color: var(--ink-soft); font-size: 14px;">Terms used throughout the simulator.</p>
+        </div>
+        <button class="btn" id="glossary-close" style="font-size: 11px;">✕ Close</button>
+      </div>
+      <dl style="margin: 0;">
+        ${GLOSSARY.map(g => `
+          <div style="margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px dotted var(--ink-faint);">
+            <dt class="display" style="font-size: 18px; color: var(--rust); margin-bottom: 4px;">${g.term}</dt>
+            <dd style="margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink-soft);">${g.def}</dd>
+          </div>
+        `).join('')}
+      </dl>
+    </div>
+  `;
+  // Click outside or on close button closes
+  overlay.addEventListener('click', () => overlay.remove());
+  document.body.appendChild(overlay);
+};
+
+// =====================================================================
+// INITIAL RENDER
+// =====================================================================
+render();
+</script>
