@@ -99,13 +99,20 @@
     transition: all 0.15s;
     box-shadow: 3px 3px 0 var(--ink);
   }
-  .btn:hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+  .btn:hover { } /* placeholder; real hover scoped below */
+  @media (hover: hover) {
+    .btn:hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+  }
   .btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
   .btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: 1px 1px 0 var(--ink); }
   .btn-primary { background: var(--rust); color: var(--paper); border-color: var(--rust); box-shadow: 3px 3px 0 var(--ink); }
-  .btn-primary:hover:not(:disabled) { background: var(--rust-soft); }
+  @media (hover: hover) {
+    .btn-primary:hover:not(:disabled) { background: var(--rust-soft); }
+  }
   .btn-ghost { border-style: dashed; box-shadow: none; }
-  .btn-ghost:hover:not(:disabled) { box-shadow: 2px 2px 0 var(--ink); }
+  @media (hover: hover) {
+    .btn-ghost:hover:not(:disabled) { box-shadow: 2px 2px 0 var(--ink); }
+  }
 
   /* Tooltips and tags */
   .tag {
@@ -161,7 +168,9 @@
 
   /* small hover state */
   .hover-lift { transition: transform 0.15s; }
-  .hover-lift:hover { transform: translateY(-2px); }
+  @media (hover: hover) {
+    .hover-lift:hover { transform: translateY(-2px); }
+  }
 
   /* Animation */
   @keyframes fadein { from { opacity: 0; transform: translateY(8px);} to {opacity:1; transform: translateY(0);} }
@@ -681,10 +690,12 @@ function render() {
 
 function renderFooter() {
   const f = document.createElement('footer');
-  f.style.cssText = 'margin-top: 60px; padding-top: 22px; border-top: 1px dashed var(--ink-faint); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;';
+  f.style.cssText = 'margin-top: 60px; padding-top: 22px; border-top: 1px dashed var(--ink-faint); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;';
   f.innerHTML = `
-    <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-faint);">
-      Riffle Run · v 1.0
+    <div style="display: flex; gap: 18px; align-items: center; flex-wrap: wrap; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-faint);">
+      <span>Riffle Run · v 1.0</span>
+      <button onclick="window.__openTerms()" type="button" style="background: none; border: none; padding: 0; font: inherit; color: var(--ink-soft); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; letter-spacing: 0.16em;">Terms of Use</button>
+      <span style="color: var(--ink-faint);">Educational &amp; professional use · Not for regulatory reporting</span>
     </div>
     <div class="hand" style="font-size: 18px; color: var(--rust); transform: rotate(-1deg);">
       Created by Michael Stocklin · 2026
@@ -777,9 +788,9 @@ function renderStage() {
 function stageIntro() {
   const el = document.createElement('div');
   el.innerHTML = `
-    <div class="panel" style="padding: clamp(20px, 3vw, 36px); margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 32px; align-items: center;">
+    <div class="panel" style="padding: clamp(20px, 3vw, 36px); margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 32px; align-items: center;">
       <div>
-        <h2 class="display" style="font-size: 36px; margin: 0 0 16px; line-height: 1.1;">Welcome to <span style="color: var(--rust);">Big Fish Creek</span>.</h2>
+        <h2 class="display" style="font-size: clamp(28px, 5vw, 38px); margin: 0 0 16px; line-height: 1.1;">Welcome to <span style="color: var(--rust);">Big Fish Creek</span>.</h2>
         <p style="font-size: 16px; line-height: 1.65; color: var(--ink-soft); margin-bottom: 16px;">
           You're a field tech assigned to assess a 110-meter stretch of stream for fish habitat.
           Across five stages, you'll learn the methodology biologists use across the Pacific Northwest:
@@ -788,14 +799,14 @@ function stageIntro() {
         <p style="font-size: 15px; color: var(--ink-faint); font-style: italic; border-left: 3px solid var(--rust); padding-left: 14px; margin: 18px 0;">
           Each stage gives feedback. You don't have to be perfect — biologists rarely are on the first try. The point is to learn what each measurement is sensitive to, and why the protocol asks for it the way it does.
         </p>
-        <div style="display: flex; gap: 10px; align-items: center; margin-top: 22px;">
-          <button class="btn btn-primary" onclick="goStage('layout')">Begin fieldwork →</button>
-          <button class="btn btn-ghost" onclick="window.__openGlossary()">📖 Reference first</button>
+        <div style="display: flex; gap: 10px; align-items: center; margin-top: 22px; flex-wrap: wrap; position: relative; z-index: 5;">
+          <button class="btn btn-primary" onclick="window.__beginFieldwork()" type="button">Begin fieldwork →</button>
+          <button class="btn btn-ghost" onclick="window.__openGlossary()" type="button">📖 Reference first</button>
         </div>
       </div>
-      <div style="position: relative;">
+      <div style="position: relative; padding-bottom: 30px;">
         ${introIllustrationSVG()}
-        <div class="hand" style="position: absolute; bottom: -20px; right: 0; font-size: 22px; color: var(--rust); transform: rotate(-3deg);">
+        <div class="hand" style="position: absolute; bottom: 0; right: 0; font-size: clamp(16px, 2vw, 22px); color: var(--rust); transform: rotate(-3deg); pointer-events: none;">
           ← study the reach<br/>before going in
         </div>
       </div>
@@ -3090,6 +3101,138 @@ function stageSummary() {
 // =====================================================================
 // NAVIGATION
 // =====================================================================
+// =====================================================================
+// TERMS & CONDITIONS
+// =====================================================================
+const TERMS_VERSION = '1.0';
+
+const TERMS = {
+  title: 'Terms of Use',
+  effective: 'Effective: April 25, 2026',
+  intro: 'Riffle Run is an interactive learning tool for stream habitat assessment. By clicking "I agree" you accept the following terms.',
+  sections: [
+    {
+      h: '1. Educational and professional use',
+      p: 'Riffle Run is provided for both <b>educational use</b> (classroom instruction, self-directed learning, training) and <b>professional use</b> (pre-fieldwork training, refresher exercises for working biologists, technician orientation). You may use it for either purpose at no cost.'
+    },
+    {
+      h: '2. Not a substitute for field training',
+      p: 'This simulator presents simplified, idealized stream conditions designed for teaching. It is <b>not a substitute</b> for hands-on training under qualified supervision, agency-specific protocols, or formal field-methods coursework. Real streams present judgment calls, ambiguity, and safety hazards that no simulator can fully reproduce. Performing actual habitat assessments without proper training is unsafe and may produce unreliable data.'
+    },
+    {
+      h: '3. No warranty on data or methodology',
+      p: 'The protocols, equations, thresholds, and rationale presented here reflect commonly accepted practice as of the effective date but are <b>provided "as is" without warranty</b> of any kind, express or implied. Methodologies evolve; specific permit requirements, regulatory standards, or agency protocols may differ from what is shown. Always defer to your governing agency or research project\'s current published methods.'
+    },
+    {
+      h: '4. Not for regulatory or compliance reporting',
+      p: 'Output from Riffle Run, including the field report, scores, or any computed metrics, is <b>training output only</b> and must not be used for regulatory submissions, compliance reports, environmental impact assessments, permit applications, scientific publications, or any decision affecting natural resources, public safety, or property.'
+    },
+    {
+      h: '5. Limitation of liability',
+      p: 'To the fullest extent permitted by law, the creator of Riffle Run is <b>not liable</b> for any direct, indirect, incidental, consequential, or other damages arising from use of, or inability to use, this tool. This includes but is not limited to errors in the simulator\'s data, decisions made based on simulator feedback, harm during real fieldwork, or losses arising from reliance on simulator content.'
+    },
+    {
+      h: '6. Data and privacy',
+      p: 'Riffle Run runs entirely in your browser. <b>No personal data is collected, transmitted, or stored on any server.</b> Local browser storage may be used only to remember preferences (such as your sound on/off setting and acceptance of these terms). You can clear this at any time through your browser settings.'
+    },
+    {
+      h: '7. Attribution and modification',
+      p: 'Riffle Run was created by Michael Stocklin (2026). You may use, share, and reference this tool freely for educational and professional purposes. If you adapt or redistribute it, please retain this attribution. The simulator is intended as a stand-alone teaching tool and is not affiliated with or endorsed by any specific agency or institution.'
+    },
+    {
+      h: '8. Field safety',
+      p: 'When you do go to a real stream: never wade alone in unfamiliar water, watch for slippery substrate and submerged debris, dress for cold-water immersion, carry communication and basic first-aid, and respect access permissions and seasonal closures. The most important measurement is everyone returning home safely.'
+    },
+  ],
+  agreeNote: 'By selecting "I agree," you acknowledge that you have read these terms and accept them. You can re-open this notice any time from the footer.',
+};
+
+function hasAgreedTerms() {
+  try { return localStorage.getItem('riffleRunTermsAgreed') === TERMS_VERSION; }
+  catch (e) { return false; }
+}
+function recordTermsAgreement() {
+  try { localStorage.setItem('riffleRunTermsAgreed', TERMS_VERSION); } catch (e) {}
+}
+
+window.__beginFieldwork = () => {
+  if (!hasAgreedTerms()) {
+    window.__openTerms({ requireAgreement: true });
+    return;
+  }
+  goStage('layout');
+};
+
+window.__openTerms = ({ requireAgreement = false } = {}) => {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(40,30,10,0.78); z-index: 220; display: flex; align-items: center; justify-content: center; padding: 16px; animation: fadein 0.2s;';
+
+  const renderInner = () => `
+    <div class="panel" style="max-width: 720px; width: 100%; max-height: 90vh; overflow-y: auto; padding: clamp(20px, 3vw, 36px);">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; flex-wrap: wrap;">
+        <div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--rust);">${TERMS.effective} · v ${TERMS_VERSION}</div>
+          <h2 class="display" style="margin: 4px 0 0; font-size: clamp(26px, 4vw, 34px);">${TERMS.title}</h2>
+        </div>
+        ${!requireAgreement ? `<button class="btn terms-close-btn" type="button" style="font-size: 11px;">✕ Close</button>` : ''}
+      </div>
+      <p style="margin: 0 0 18px; font-size: 14px; line-height: 1.55; color: var(--ink-soft);">${TERMS.intro}</p>
+      ${TERMS.sections.map(s => `
+        <div style="margin-bottom: 16px;">
+          <h4 style="margin: 0 0 4px; font-size: 14px; color: var(--ink); font-weight: 700;">${s.h}</h4>
+          <p style="margin: 0; font-size: 13px; line-height: 1.6; color: var(--ink-soft);">${s.p}</p>
+        </div>
+      `).join('')}
+      <div style="margin-top: 22px; padding: 14px 16px; background: rgba(192,138,42,0.08); border-left: 3px solid var(--gold); font-size: 13px; line-height: 1.55; color: var(--ink-soft); font-style: italic;">
+        ${TERMS.agreeNote}
+      </div>
+      ${requireAgreement ? `
+        <div style="margin-top: 22px; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;">
+          <button class="btn terms-decline-btn" type="button">Decline & exit</button>
+          <button class="btn btn-primary terms-agree-btn" type="button">I agree — Begin →</button>
+        </div>
+      ` : `
+        <div style="margin-top: 18px; display: flex; gap: 10px; justify-content: flex-end;">
+          <button class="btn terms-close-btn-2" type="button" style="font-size: 11px;">Close</button>
+        </div>
+      `}
+    </div>
+  `;
+
+  overlay.innerHTML = renderInner();
+  document.body.appendChild(overlay);
+
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => {
+    if (e.key === 'Escape' && !requireAgreement) close();
+  };
+  document.addEventListener('keydown', onKey);
+
+  // Close buttons (only present when not gating)
+  overlay.querySelectorAll('.terms-close-btn, .terms-close-btn-2').forEach(b => {
+    b.addEventListener('click', close);
+  });
+  // Agreement gate buttons
+  const agreeBtn = overlay.querySelector('.terms-agree-btn');
+  const declineBtn = overlay.querySelector('.terms-decline-btn');
+  if (agreeBtn) agreeBtn.addEventListener('click', () => {
+    recordTermsAgreement();
+    sfx.success();
+    close();
+    goStage('layout');
+  });
+  if (declineBtn) declineBtn.addEventListener('click', () => {
+    sfx.tick();
+    close();
+    toast('You can review these terms any time from the footer.', 'info', 3500);
+  });
+
+  // Click backdrop to close (only if not gating)
+  if (!requireAgreement) {
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  }
+};
+
 function goStage(name) {
   state.stage = name;
   window.scrollTo({ top: 0, behavior: 'smooth' });
