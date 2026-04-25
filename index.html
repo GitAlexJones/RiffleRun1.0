@@ -647,6 +647,24 @@ function centerlineAt(s) {
 // RENDER FRAMEWORK (vanilla, render-on-state-change)
 // =====================================================================
 const root = document.getElementById('app');
+
+// Helper: render a "Why are we doing this?" badge that opens the Reference
+// modal scrolled to the current stage's rationale.
+function whyButton(whyId) {
+  return `<button onclick="window.__openGlossary('why', '${whyId}')"
+                  class="why-btn"
+                  style="display: inline-flex; align-items: center; gap: 6px;
+                         padding: 6px 12px;
+                         background: rgba(192,138,42,0.15);
+                         border: 1.5px solid var(--gold); color: var(--gold);
+                         font-family: 'JetBrains Mono', monospace; font-size: 10px;
+                         letter-spacing: 0.1em; text-transform: uppercase;
+                         cursor: pointer; transition: all 0.15s;"
+                  onmouseover="this.style.background='var(--gold)'; this.style.color='var(--paper)';"
+                  onmouseout="this.style.background='rgba(192,138,42,0.15)'; this.style.color='var(--gold)';">
+    <span style="font-size: 13px;">?</span> Why are we doing this?
+  </button>`;
+}
 function render() {
   // Dismiss any open coach mark before re-rendering (anchors will be stale)
   dismissCoach();
@@ -1023,9 +1041,12 @@ function layoutCanvas() {
   }
 
   c.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
       <h3 class="display" style="margin: 0; font-size: 22px;">Site Layout · top-down view</h3>
-      <span class="tag" style="color: var(--rust);">stage 01</span>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        ${whyButton('layout')}
+        <span class="tag" style="color: var(--rust);">stage 01</span>
+      </div>
     </div>
     <svg viewBox="0 0 ${W} ${H}" style="width: 100%; height: auto; background: linear-gradient(180deg, #e8d9b4, #d4c094); border: 1.5px solid var(--ink); cursor: ${phase === 'done' ? 'default' : 'crosshair'};" id="layout-svg">
       <defs>
@@ -1397,12 +1418,15 @@ function crossSectionCanvas() {
       <h3 class="display" style="margin: 0; font-size: 22px;">
         Channel Cross Section · transect <span style="color: var(--rust);">${ti}</span>
       </h3>
-      <div style="display: flex; gap: 6px; align-items: center;">
-        ${oddTransects.map(t => `
-          <button class="btn ${t === ti ? 'btn-primary' : ''}"
-                  style="padding: 4px 10px; font-size: 11px; box-shadow: ${t === ti ? '2px 2px 0 var(--ink)' : 'none'};"
-                  onclick="window.__pickCSTransect(${t})">T${t}</button>
-        `).join('')}
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        ${whyButton('crosssection')}
+        <div style="display: flex; gap: 6px; align-items: center;">
+          ${oddTransects.map(t => `
+            <button class="btn ${t === ti ? 'btn-primary' : ''}"
+                    style="padding: 4px 10px; font-size: 11px; box-shadow: ${t === ti ? '2px 2px 0 var(--ink)' : 'none'};"
+                    onclick="window.__pickCSTransect(${t})">T${t}</button>
+          `).join('')}
+        </div>
       </div>
     </div>
     <svg viewBox="0 0 ${W} ${H}" style="width: 100%; background: linear-gradient(180deg, #f0e8d6, #e0d4b0); border: 1.5px solid var(--ink);" id="cs-svg">
@@ -1724,9 +1748,12 @@ function stageUnits() {
   });
 
   c.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
       <h3 class="display" style="margin: 0; font-size: 22px;">Channel Units · longitudinal profile</h3>
-      <span class="tag" style="color: var(--rust);">stage 03</span>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        ${whyButton('units')}
+        <span class="tag" style="color: var(--rust);">stage 03</span>
+      </div>
     </div>
     <svg viewBox="0 0 ${W} ${H}" style="width: 100%; background: linear-gradient(180deg, #f0e8d6 0%, #e0d4b0 50%, #d0c290 100%); border: 1.5px solid var(--ink); cursor: ${state.unitsComplete ? 'default' : 'crosshair'};" id="unit-svg">
       <!-- earth -->
@@ -2010,9 +2037,12 @@ function substrateChoosePanel(segments, riffles) {
 
   // Suggest button: smartly distribute 6 across riffles (or top up with runs)
   c.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
       <h3 class="display" style="margin: 0; font-size: 22px;">Substrate · cross-section placement</h3>
-      <span class="tag" style="color: var(--rust);">stage 04 — step 1/2</span>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        ${whyButton('substrate')}
+        <span class="tag" style="color: var(--rust);">stage 04 — step 1/2</span>
+      </div>
     </div>
     <p style="font-size: 14px; color: var(--ink-soft); line-height: 1.6; max-width: 700px; margin: 0 0 16px;">
       Place <b>6 cross-sections</b> for substrate sampling. <b>Riffles get priority</b>: if there are ≥6 riffles, one per riffle. With fewer riffles, distribute extras proportional to riffle length (then add runs if needed). Don't put two cross-sections closer than 2 m.
@@ -2201,13 +2231,16 @@ function substrateSamplePanel() {
         Substrate · sampling
         <span style="color: var(--ink-faint); font-size: 16px; font-style: italic;">CS${csIdx+1} of 6 · point ${next+1}/${PICKS_PER_CS}</span>
       </h3>
-      <div style="display: flex; gap: 6px;">
-        ${state.substrateCrossSections.map((cs, i) => {
-          const picks = state.substratePicks.filter(p => p.cs === i).length;
-          const done = picks === PICKS_PER_CS;
-          const current = i === csIdx;
-          return `<div style="border: 1.5px solid ${done ? 'var(--green-ok)' : (current ? 'var(--rust)' : 'var(--ink-faint)')}; padding: 4px 8px; font-family: 'JetBrains Mono'; font-size: 11px; ${done ? 'background: var(--green-ok); color: white;' : (current ? 'background: var(--rust); color: white;' : '')}">CS${i+1}: ${picks}/${PICKS_PER_CS}</div>`;
-        }).join('')}
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        ${whyButton('substrate')}
+        <div style="display: flex; gap: 6px;">
+          ${state.substrateCrossSections.map((cs, i) => {
+            const picks = state.substratePicks.filter(p => p.cs === i).length;
+            const done = picks === PICKS_PER_CS;
+            const current = i === csIdx;
+            return `<div style="border: 1.5px solid ${done ? 'var(--green-ok)' : (current ? 'var(--rust)' : 'var(--ink-faint)')}; padding: 4px 8px; font-family: 'JetBrains Mono'; font-size: 11px; ${done ? 'background: var(--green-ok); color: white;' : (current ? 'background: var(--rust); color: white;' : '')}">CS${i+1}: ${picks}/${PICKS_PER_CS}</div>`;
+          }).join('')}
+        </div>
       </div>
     </div>
 
@@ -2476,9 +2509,12 @@ function stageUndercut() {
 
   el.innerHTML = `
     <div class="panel" style="padding: 22px; margin-bottom: 18px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 12px; flex-wrap: wrap;">
         <h3 class="display" style="margin: 0; font-size: 22px;">Undercut Banks · qualify each candidate</h3>
-        <span class="tag" style="color: var(--rust);">stage 05</span>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          ${whyButton('undercut')}
+          <span class="tag" style="color: var(--rust);">stage 05</span>
+        </div>
       </div>
       <p style="font-size: 14px; color: var(--ink-soft); line-height: 1.6; margin: 0;">
         An undercut qualifies as fish habitat only if all of these are true:
@@ -2885,6 +2921,142 @@ const GLOSSARY = [
 
 const GLOSSARY_CATEGORIES = ['Channel geometry', 'Channel units', 'Substrate', 'Riparian & cover', 'Survey methodology', 'Hydrology', 'Biota & habitat'];
 
+// Per-stage rationale — the "why" behind each protocol step
+const WHY = [
+  {
+    id: 'layout',
+    stage: 'Site Layout',
+    headline: 'Why find bankfull and lay out 11 transects?',
+    sections: [
+      {
+        h: 'Why bankfull, specifically?',
+        p: 'Bankfull is the elevation at which water just starts to overflow onto the floodplain. It corresponds to the flow that does the most channel-shaping work over geologic time — the so-called <b>effective discharge</b>, with a recurrence interval of about 1.5 years. Because bankfull dimensions reflect the channel\'s long-term hydraulic geometry, they\'re reproducible year to year, even when today\'s flow is high or low. Wetted dimensions, by contrast, change daily.'
+      },
+      {
+        h: 'Why average 5 widths?',
+        p: 'Bankfull indicators are often ambiguous in the field. Slope breaks can be subtle, vegetation lines confused with terraces, stain marks misleading. Averaging 5 measurements taken roughly one stream-width apart smooths out individual reading errors and gives a stable estimate of channel size. One-off bad readings get diluted; consistent under- or over-estimation across all 5 reveals a methodological problem.'
+      },
+      {
+        h: 'Why scale site length to channel size?',
+        p: 'Habitat features (pool spacing, meander wavelength, large wood frequency) all scale with channel width. A reach that\'s short relative to channel size will miss this variability — you might land entirely in one pool or one riffle and call it the whole stream. The 10× rule (site length = 10 × width category) ensures you capture roughly 5–7 channel-unit cycles, enough for stable summary statistics.'
+      },
+      {
+        h: 'Why discrete width categories instead of using BFW directly?',
+        p: 'Categories (6, 8, 10, 12 m…) make data <b>comparable across sites</b>. Two surveyors at two sites with BFW = 7.4 m and 7.6 m both use 8 m spacing — their cross-sections are at directly comparable positions. Without categorization, every site has bespoke spacing and you can\'t pool data.'
+      },
+      {
+        h: 'Why work upstream from BOS to TOS?',
+        p: 'Walking and measuring kicks up sediment. Working upstream means disturbance from each transect drifts <i>away</i> from subsequent measurements, not into them. Cleaner water = better visibility for substrate calls and pebble counts.'
+      },
+    ],
+    note: 'Site layout is the foundation. Get it wrong and every downstream measurement is comparing apples to oranges across sites or years.',
+  },
+  {
+    id: 'crosssection',
+    stage: 'Cross Section',
+    headline: 'Why measure 11 depths across the channel?',
+    sections: [
+      {
+        h: 'Why two depths (bankfull AND wetted)?',
+        p: '<b>Bankfull depth</b> describes the channel\'s long-term capacity — independent of today\'s flow. <b>Wetted depth</b> reflects current habitat. The pair lets you compute (a) how much channel is currently filled (a flow indicator), and (b) channel capacity for high-flow modeling. Together they answer "what is this channel built for?" and "what is it doing today?"'
+      },
+      {
+        h: 'Why 11 points?',
+        p: 'Eleven equally spaced depths — including the two bank endpoints (depth = 0 by definition) — capture the channel\'s shape with enough resolution to compute <b>mean depth, max depth, cross-sectional area, and hydraulic radius</b> using the trapezoidal rule. Fewer points miss the thalweg or sand bars; many more points are diminishing returns relative to field-measurement error.'
+      },
+      {
+        h: 'Why every odd transect, not every transect?',
+        p: 'Cross sections are time-consuming. Sampling at every odd transect (1, 3, 5, 7, 9, 11) gives 6 cross-sections per reach — enough to detect within-reach variability without doubling field time. Even-numbered transects are still used for other measurements (substrate, vegetation) but skip the depth profile.'
+      },
+      {
+        h: 'What do these data feed into?',
+        p: 'Cross-section area × velocity = <b>discharge</b>. Mean depth and hydraulic radius feed Manning\'s equation for velocity estimates. Width-to-depth ratio is a key channel-classification metric (Rosgen, Montgomery–Buffington). Year-over-year changes flag aggradation, incision, or widening — early warning signs of disturbance upstream.'
+      },
+    ],
+    note: 'Cross sections are the most quantitatively rich measurement in the protocol. A good cross-section dataset can support hydraulic modeling years after the survey.',
+  },
+  {
+    id: 'units',
+    stage: 'Channel Units',
+    headline: 'Why classify pools, riffles, and runs?',
+    sections: [
+      {
+        h: 'Why does the distinction matter?',
+        p: 'Salmonids and other stream organisms use these units differently. Adult salmon hold in <b>pools</b> for cover and rest. They spawn in clean gravel of <b>riffles</b> or <b>pool tail-outs</b>. Juveniles rear in pool margins and slow runs. Macroinvertebrates concentrate in oxygen-rich riffles. A reach that\'s all run or all riffle supports a different fish community than one with a balanced sequence.'
+      },
+      {
+        h: 'Why care about counts and ratios?',
+        p: 'Healthy salmonid streams typically show a <b>roughly balanced pool-to-riffle ratio</b> (1:1 by count, with pools slightly longer). Channels with too few pools (often from sediment fill or wood removal) lose adult holding habitat. Channels with too few riffles (often from impoundments) lose spawning area and oxygenation. The unit inventory is a quick diagnostic.'
+      },
+      {
+        h: 'Why is this hard to do consistently?',
+        p: 'The boundary between a "deep run" and a "shallow pool" is judgment-dependent. Different surveyors can call the same reach 12 units or 18 units. The protocol mitigates this by requiring (a) <b>minimum unit length ≥ 1 channel width</b> (so micro-features don\'t inflate counts), and (b) <b>multiple criteria</b> — gradient AND substrate AND flow character must all suggest the same call before you log it.'
+      },
+      {
+        h: 'How does this connect to other measurements?',
+        p: 'Substrate sampling is weighted toward riffles (because riffles are where spawning happens). Pool surveys focus on residual depth and cover. LWD inventories often record the unit each piece occupies. Channel units are the spatial filing system for almost everything else.'
+      },
+    ],
+    note: 'Tier I habitat classification (pool/riffle/run) is the most basic stream geomorphology — and the most argued about. Two experienced biologists will still disagree on 10–20% of unit calls.',
+  },
+  {
+    id: 'substrate',
+    stage: 'Substrate',
+    headline: 'Why count rocks?',
+    sections: [
+      {
+        h: 'Why pebble counts at all?',
+        p: 'Substrate composition controls <b>spawning success, invertebrate diversity, and channel stability</b>. Salmonid eggs need clean, well-oxygenated gravel — too many fines smother them. Stoneflies and mayflies (sensitive water-quality indicators) need cobble interstices to hide in. Channel armor (a coarse surface layer) protects against scour. The particle-size distribution tells you which of these the streambed currently supports.'
+      },
+      {
+        h: 'Why blind-pick particles instead of choosing them?',
+        p: 'Surveyors have an unconscious bias toward <b>memorable particles</b> — interesting ones, big ones, easy-to-grab ones. Reaching down without looking and picking the first thing you feel removes that bias. The result is a sample that more faithfully represents the bed surface.'
+      },
+      {
+        h: 'Why prioritize riffles?',
+        p: 'Riffles are where the fish-relevant substrate processes happen — spawning gravel, invertebrate habitat, oxygenation through gravel interstices. They\'re also where bedload transport is most active and substrate composition reflects flow history most clearly. Pool substrate, by contrast, accumulates fines passively and tells you less about active channel processes.'
+      },
+      {
+        h: 'Why measure embeddedness separately?',
+        p: 'Particle-size counts capture only what\'s on the surface. <b>Embeddedness</b> tells you what\'s happening below the surface — how much fine sediment has packed in around the cobbles. A reach can have great surface-cobble counts but be functionally dead for spawning if 80% of those cobbles are buried in sand. Embeddedness > 30% generally indicates degraded conditions.'
+      },
+      {
+        h: 'Why measure b-axis (the middle dimension)?',
+        p: 'Particles are sorted by water based on what fits through what. The b-axis controls whether a particle can pass through a sieve opening or flow regime. Using a-axis (longest) over-represents flat stones; c-axis (shortest) under-represents them. B-axis is the dimension that physically matters for transport and for fitting into a gravelometer template.'
+      },
+    ],
+    note: 'Pebble counts are the standard for sediment monitoring in wadeable streams. The Wolman method (this protocol\'s ancestor) has been the field standard since 1954.',
+  },
+  {
+    id: 'undercut',
+    stage: 'Undercut Banks',
+    headline: 'Why these specific qualifying criteria?',
+    sections: [
+      {
+        h: 'Why undercuts at all?',
+        p: 'Undercut banks are <b>premium fish cover</b>. They provide overhead protection from avian predators, refuge from high flows, and shaded cool water. Larger trout and adult salmon strongly prefer undercuts to most other cover types. A reach with abundant qualifying undercuts can support disproportionately high adult fish biomass.'
+      },
+      {
+        h: 'Why depth ≥ 20 cm?',
+        p: 'A bank "lip" of less than 20 cm is just an overhang — fish can\'t actually shelter under it. The 20-cm threshold is set so the feature must be deep enough to fully cover an adult salmonid (a mature steelhead or coho is roughly that tall).'
+      },
+      {
+        h: 'Why length ≥ 1 m?',
+        p: 'Short undercuts (a few tens of cm) are typically incidental scour features around a single root or boulder. They come and go with high flows. Continuous undercuts ≥ 1 m are stable features rooted in the bank structure (sod, root mat, cohesive sediment) and persist across years.'
+      },
+      {
+        h: 'Why ceiling ≤ 1 m above water?',
+        p: 'A higher ceiling means the "undercut" is really a partly hollow bank — fish can\'t use the upper void without leaving the water. The 1-m cap restricts the feature to the genuinely fish-occupiable cavity.'
+      },
+      {
+        h: 'Why "must provide cover at sampling time"?',
+        p: 'An undercut that\'s above the current water surface (dewatered) provides zero habitat right now, however it might function in spring high water. The protocol records what fish actually have access to today, not what they might have at peak flow.'
+      },
+    ],
+    note: 'Every criterion exists to filter out features that <i>look</i> like cover but don\'t function as cover. Strict criteria mean undercut counts are comparable across sites and years.',
+  },
+];
+
 const EQUATIONS = [
   {
     name: 'Average bankfull width',
@@ -3050,7 +3222,7 @@ const EQUATIONS = [
     },
   },
 ];
-window.__openGlossary = (initialTab = 'terms') => {
+window.__openGlossary = (initialTab = 'terms', focusWhyId = null) => {
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(40,30,10,0.7); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadein 0.2s;';
 
@@ -3065,7 +3237,6 @@ window.__openGlossary = (initialTab = 'terms') => {
     }
 
     if (q) {
-      // When searching, just list flat
       return `<dl style="margin: 0;">
         ${filtered.map(g => `
           <div style="margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px dotted var(--ink-faint);">
@@ -3079,7 +3250,6 @@ window.__openGlossary = (initialTab = 'terms') => {
       </dl>`;
     }
 
-    // Grouped by category
     return GLOSSARY_CATEGORIES.map(cat => {
       const inCat = GLOSSARY.filter(g => g.cat === cat);
       if (inCat.length === 0) return '';
@@ -3099,19 +3269,53 @@ window.__openGlossary = (initialTab = 'terms') => {
     }).join('');
   };
 
+  const renderWhyContent = () => `
+    <div style="font-size: 14px; color: var(--ink-soft); line-height: 1.55; margin-bottom: 24px; padding: 14px 18px; background: rgba(192,138,42,0.08); border-left: 3px solid var(--gold);">
+      <b>This isn\'t just procedure.</b> Each step in the protocol exists for a reason — usually because biologists tried it the other way and got worse data. Knowing the <i>why</i> helps you make better field decisions when the protocol can\'t cover every situation.
+    </div>
+    <nav style="display: flex; gap: 6px; margin-bottom: 22px; flex-wrap: wrap;">
+      ${WHY.map((w, i) => `
+        <a href="#why-${w.id}" style="padding: 6px 12px; border: 1.5px solid var(--ink); background: var(--paper); color: var(--ink); font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; text-decoration: none;">
+          <span style="opacity: 0.5;">${(i+1).toString().padStart(2,'0')}</span> ${w.stage}
+        </a>
+      `).join('')}
+    </nav>
+    ${WHY.map(w => `
+      <article id="why-${w.id}" style="margin-bottom: 36px; scroll-margin-top: 20px;">
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--rust); margin-bottom: 4px;">Stage · ${w.stage}</div>
+        <h3 class="display" style="margin: 0 0 18px; font-size: 24px; line-height: 1.2;">${w.headline}</h3>
+        ${w.sections.map(s => `
+          <div style="margin-bottom: 18px;">
+            <h4 style="margin: 0 0 6px; font-size: 15px; color: var(--ink); font-weight: 700;">${s.h}</h4>
+            <p style="margin: 0; font-size: 14px; line-height: 1.65; color: var(--ink-soft);">${s.p}</p>
+          </div>
+        `).join('')}
+        ${w.note ? `
+          <div style="margin-top: 12px; padding: 12px 16px; background: rgba(74,104,120,0.08); border-left: 3px solid var(--water-2); font-size: 13px; line-height: 1.55; font-style: italic; color: var(--ink-soft);">
+            ${w.note}
+          </div>
+        ` : ''}
+      </article>
+    `).join('')}
+  `;
+
   const renderInner = (tab) => `
     <div class="panel glossary-inner" style="max-width: 880px; width: 100%; max-height: 88vh; overflow-y: auto; padding: clamp(20px, 3vw, 36px);">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; gap: 16px; flex-wrap: wrap;">
         <div>
           <h2 class="display" style="margin: 0; font-size: clamp(26px, 4vw, 34px);">Reference</h2>
-          <p style="margin: 4px 0 0; font-style: italic; color: var(--ink-soft); font-size: 14px;">Glossary and equations for stream habitat assessment.</p>
+          <p style="margin: 4px 0 0; font-style: italic; color: var(--ink-soft); font-size: 14px;">Glossary, equations, and the rationale behind each step.</p>
         </div>
         <button class="btn glossary-close-btn" style="font-size: 11px;">✕ Close</button>
       </div>
 
       <!-- Tabs -->
-      <div style="display: flex; gap: 0; border-bottom: 2px solid var(--ink); margin-bottom: 18px;">
-        ${[['terms', `Glossary · ${GLOSSARY.length}`], ['equations', `Equations · ${EQUATIONS.length}`]].map(([key, label]) => `
+      <div style="display: flex; gap: 0; border-bottom: 2px solid var(--ink); margin-bottom: 18px; flex-wrap: wrap;">
+        ${[
+          ['why', `Why? · ${WHY.length}`],
+          ['terms', `Glossary · ${GLOSSARY.length}`],
+          ['equations', `Equations · ${EQUATIONS.length}`],
+        ].map(([key, label]) => `
           <button class="glossary-tab" data-tab="${key}"
                   style="background: ${tab === key ? 'var(--ink)' : 'transparent'};
                          color: ${tab === key ? 'var(--paper)' : 'var(--ink)'};
@@ -3125,6 +3329,7 @@ window.__openGlossary = (initialTab = 'terms') => {
         `).join('')}
       </div>
 
+      ${tab === 'why' ? renderWhyContent() : ''}
       ${tab === 'terms' ? `
         <div style="margin-bottom: 18px; position: relative;">
           <input type="text" class="glossary-search" placeholder="Search terms…" value="${searchQuery.replace(/"/g, '&quot;')}"
@@ -3134,11 +3339,12 @@ window.__openGlossary = (initialTab = 'terms') => {
         <div class="glossary-content">
           ${renderTermsContent()}
         </div>
-      ` : `
+      ` : ''}
+      ${tab === 'equations' ? `
         <div style="display: flex; flex-direction: column; gap: 24px;">
           ${EQUATIONS.map(e => renderEquation(e)).join('')}
         </div>
-      `}
+      ` : ''}
     </div>
   `;
 
@@ -3158,7 +3364,6 @@ window.__openGlossary = (initialTab = 'terms') => {
         wire();
       });
     });
-    // Wire search input - update results as you type without rebuilding the entire modal
     const searchInput = overlay.querySelector('.glossary-search');
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
@@ -3166,11 +3371,18 @@ window.__openGlossary = (initialTab = 'terms') => {
         const contentEl = overlay.querySelector('.glossary-content');
         if (contentEl) contentEl.innerHTML = renderTermsContent();
       });
-      // Auto-focus search on open (desktop only — avoid keyboard popup on mobile)
       if (window.matchMedia('(min-width: 901px)').matches) searchInput.focus();
     }
   };
   wire();
+
+  // If a specific WHY id was requested, scroll into view
+  if (initialTab === 'why' && focusWhyId) {
+    setTimeout(() => {
+      const el = overlay.querySelector(`#why-${focusWhyId}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  }
 
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) close();
