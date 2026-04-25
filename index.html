@@ -1672,29 +1672,40 @@ function stageUnits() {
   const el = document.createElement('div');
   el.style.cssText = 'display: grid; grid-template-columns: 1fr; gap: 24px;';
 
-  const W = 1400, H = 360;
-  const padX = 80, padY = 50;
+  const W = 1400, H = 460;
+  const padX = 80, padY = 60;
   const sToX = sn => padX + sn * (W - 2*padX);
 
-  // Generate longitudinal water profile and bed profile
+  // =====================================================================
+  // Bed and water shape: pools dip below baseline, riffles bump above it,
+  // runs stay flat.
+  // =====================================================================
   function bedAt(sn) {
-    // overall slope + unit-specific shape
-    let z = 1 - sn * 0.6;  // overall drop from upstream-style; reverse so flow → right looks lower
-    z = sn * 0.6;
-    // bumps in riffles, dips in pools, smooth in runs
+    let z = sn * 0.55;  // overall slope downstream
     for (const u of TRUE_UNITS) {
       if (sn >= u.start && sn <= u.end) {
         const t = (sn - u.start) / (u.end - u.start);
-        if (u.type === 'pool') z += -0.18 * Math.sin(t * Math.PI);
-        if (u.type === 'riffle') z += 0.12 * Math.sin(t * Math.PI * 2);
+        if (u.type === 'pool')   z += -0.22 * Math.sin(t * Math.PI);
+        if (u.type === 'riffle') z +=  0.16 * Math.sin(t * Math.PI) + 0.04 * Math.sin(t * Math.PI * 5);
+        // runs stay smooth
       }
     }
     return z;
   }
+  // Water surface: gentle drop overall, tiny ripples in riffles
   function waterAt(sn) {
-    // smooth water surface (mostly) - water has small drop in riffles
-    let z = sn * 0.55 - 0.08;
+    let z = sn * 0.45 - 0.05;
+    for (const u of TRUE_UNITS) {
+      if (sn >= u.start && sn <= u.end && u.type === 'riffle') {
+        const t = (sn - u.start) / (u.end - u.start);
+        z += 0.012 * Math.sin(t * Math.PI * 12);  // tiny chop
+      }
+    }
     return z;
+  }
+  // Find which unit a position is in (truth, used for substrate/effects)
+  function unitAt(sn) {
+    return TRUE_UNITS.find(u => sn >= u.start && sn <= u.end);
   }
 
   // Build view
@@ -1702,85 +1713,255 @@ function stageUnits() {
   c.className = 'panel';
   c.style.cssText = 'padding: 18px;';
 
-  // bed path
-  let bedPath = `M ${sToX(0)} ${padY + bedAt(0) * 280} `;
-  for (let sn = 0; sn <= 1; sn += 0.005) bedPath += `L ${sToX(sn)} ${padY + bedAt(sn) * 280} `;
-  bedPath += ` L ${sToX(1)} ${H} L ${sToX(0)} ${H} Z`;
+  // ===== Path generation =====
+  const yFor = z => padY + z * 280;
+  // Bed line (just the line)
+  let bedLineD = `M ${sToX(0)} ${yFor(bedAt(0))} `;
+  for (let sn = 0; sn <= 1; sn += 0.003) bedLineD += `L ${sToX(sn)} ${yFor(bedAt(sn))} `;
+  // Earth fill (bed line down to bottom)
+  const earthD = bedLineD + ` L ${sToX(1)} ${H} L ${sToX(0)} ${H} Z`;
+  // Water polygon (water surface to bed, between)
+  let waterD = `M ${sToX(0)} ${yFor(waterAt(0))} `;
+  for (let sn = 0; sn <= 1; sn += 0.003) waterD += `L ${sToX(sn)} ${yFor(Math.min(waterAt(sn), bedAt(sn)))} `;
+  for (let sn = 1; sn >= 0; sn -= 0.003) waterD += `L ${sToX(sn)} ${yFor(bedAt(sn))} `;
+  waterD += 'Z';
+  // Water surface line
+  let waterSurfD = `M ${sToX(0)} ${yFor(waterAt(0))} `;
+  for (let sn = 0; sn <= 1; sn += 0.003) waterSurfD += `L ${sToX(sn)} ${yFor(Math.min(waterAt(sn), bedAt(sn)))} `;
 
-  // water path
-  let waterPath = `M ${sToX(0)} ${padY + waterAt(0) * 280} `;
-  for (let sn = 0; sn <= 1; sn += 0.005) {
-    const w = waterAt(sn);
-    const b = bedAt(sn);
-    const ws = Math.min(w, b);
-    waterPath += `L ${sToX(sn)} ${padY + ws * 200} `;
+  // ===== Substrate visualization (cobbles in/near riffles, hints in runs, none in pools) =====
+  // Deterministic pseudo-random so the layout is stable across renders
+  function pseudoRand(seed) {
+    let x = Math.sin(seed * 12.9898) * 43758.5453;
+    return x - Math.floor(x);
   }
-  for (let sn = 1; sn >= 0; sn -= 0.005) waterPath += `L ${sToX(sn)} ${padY + bedAt(sn) * 280} `;
-  waterPath += 'Z';
+  let substrateRocks = '';
+  for (let i = 0; i < 220; i++) {
+    const sn = i / 220 + (pseudoRand(i) - 0.5) * 0.005;
+    if (sn < 0 || sn > 1) continue;
+    const u = unitAt(sn);
+    if (!u || u.type === 'pool') continue;  // pools hide substrate
+    const x = sToX(sn);
+    const bedY = yFor(bedAt(sn));
+    const waterY = yFor(waterAt(sn));
+    const r1 = pseudoRand(i * 7.1 + 3);
+    const r2 = pseudoRand(i * 11.3 + 5);
+    const r3 = pseudoRand(i * 5.7 + 9);
+    if (u.type === 'riffle') {
+      // Riffle: many cobbles/boulders, some breaking water surface
+      // Skip if past unit boundary
+      if (Math.random() > 0.92) continue;
+      const size = 4 + r1 * 9; // larger
+      // Place near bed but vary upward — some breach the surface
+      const breach = r2 < 0.4;
+      const y = breach
+        ? waterY - r3 * 4 - size * 0.4
+        : (waterY + (bedY - waterY) * (0.45 + r2 * 0.55)) - size * 0.3;
+      const shade = 0.45 + r3 * 0.4;
+      const fill = `rgb(${Math.round(120*shade)}, ${Math.round(95*shade)}, ${Math.round(60*shade)})`;
+      substrateRocks += `<ellipse cx="${x}" cy="${y}" rx="${size}" ry="${size*0.78}" fill="${fill}" stroke="#2a2418" stroke-width="0.6" opacity="0.92"/>`;
+      // Small highlight
+      substrateRocks += `<ellipse cx="${x - size*0.25}" cy="${y - size*0.3}" rx="${size*0.4}" ry="${size*0.25}" fill="#fdfaf0" opacity="0.18"/>`;
+    } else if (u.type === 'run') {
+      // Runs: small pebbles visible through clear water near bed
+      if (r1 > 0.5) continue;
+      const size = 1.4 + r2 * 2.6;
+      const y = bedY - r3 * 6 - size;
+      substrateRocks += `<circle cx="${x}" cy="${y}" r="${size}" fill="rgb(120, 100, 70)" opacity="${0.35 + r1*0.25}"/>`;
+    }
+  }
+
+  // ===== Surface texture (white water, ripples, glass) =====
+  let surfaceFx = '';
+  // Riffle white water — small foam patches concentrated near substrate breaches
+  for (let i = 0; i < 180; i++) {
+    const sn = i / 180;
+    const u = unitAt(sn);
+    if (!u || u.type !== 'riffle') continue;
+    const r1 = pseudoRand(i * 3.7 + 1.1);
+    const r2 = pseudoRand(i * 9.3 + 2.7);
+    if (r1 > 0.6) continue;
+    const x = sToX(sn) + (r2 - 0.5) * 12;
+    const y = yFor(waterAt(sn)) + (r1 - 0.5) * 4;
+    const w = 6 + r1 * 8;
+    surfaceFx += `<ellipse cx="${x}" cy="${y}" rx="${w}" ry="${1.2 + r2 * 1.5}" fill="#fdfaf0" opacity="${0.55 + r1*0.3}"/>`;
+  }
+  // Run flow lines — gentle horizontal streaks
+  for (let i = 0; i < 60; i++) {
+    const sn = i / 60;
+    const u = unitAt(sn);
+    if (!u || u.type !== 'run') continue;
+    const r1 = pseudoRand(i * 4.1 + 8);
+    const r2 = pseudoRand(i * 6.7 + 12);
+    if (r1 > 0.55) continue;
+    const x = sToX(sn);
+    const y = yFor(waterAt(sn)) + 6 + r1 * 12;
+    const len = 8 + r2 * 14;
+    surfaceFx += `<path d="M ${x} ${y} q ${len/2} ${-1.5} ${len} 0" stroke="#fdfaf0" stroke-width="0.8" fill="none" opacity="${0.25 + r1*0.2}"/>`;
+  }
+  // Pool: glassy reflections (horizontal bands of slightly lighter water)
+  for (let i = 0; i < 40; i++) {
+    const sn = i / 40 + 0.012;
+    const u = unitAt(sn);
+    if (!u || u.type !== 'pool') continue;
+    const r1 = pseudoRand(i * 2.3 + 17);
+    const r2 = pseudoRand(i * 8.1 + 23);
+    if (r1 > 0.5) continue;
+    const x = sToX(sn);
+    const y = yFor(waterAt(sn)) + 4 + r1 * 6;
+    const len = 18 + r2 * 28;
+    surfaceFx += `<line x1="${x}" y1="${y}" x2="${x + len}" y2="${y}" stroke="#fdfaf0" stroke-width="0.6" opacity="${0.18 + r1*0.18}"/>`;
+  }
+
+  // ===== Pool depth tint — darker water in pool zones =====
+  let poolTint = '';
+  TRUE_UNITS.forEach((u, idx) => {
+    if (u.type !== 'pool') return;
+    const x1 = sToX(u.start), x2 = sToX(u.end);
+    // Find the deepest point in this pool
+    let deepestY = padY, deepestSn = u.start;
+    for (let sn = u.start; sn <= u.end; sn += 0.005) {
+      const y = yFor(bedAt(sn));
+      if (y > deepestY) { deepestY = y; deepestSn = sn; }
+    }
+    const cx = sToX(deepestSn);
+    const wsY = yFor(waterAt(deepestSn));
+    poolTint += `<radialGradient id="pool-tint-${idx}" cx="${(cx-x1)/(x2-x1)}" cy="0.7"><stop offset="0%" stop-color="#0d2230" stop-opacity="0.55"/><stop offset="100%" stop-color="#0d2230" stop-opacity="0"/></radialGradient>`;
+  });
 
   // user boundaries
-  const boundaries = state.unitBoundaries; // sorted, including 0 and 1
+  const boundaries = state.unitBoundaries;
   const segments = [];
   for (let i = 0; i < boundaries.length - 1; i++) {
     segments.push({ start: boundaries[i], end: boundaries[i+1], type: state.unitClassifications[i] || null });
   }
 
+  // segment classification bar at top
   let segmentBands = '';
   segments.forEach((seg, i) => {
     const x1 = sToX(seg.start), x2 = sToX(seg.end);
-    const color = seg.type ? UNIT_COLORS[seg.type] : '#cccccc';
+    const color = seg.type ? UNIT_COLORS[seg.type] : '#bbb';
     segmentBands += `
-      <rect x="${x1}" y="${padY - 22}" width="${x2-x1}" height="14" fill="${color}" opacity="0.7" stroke="${'#2a2418'}" stroke-width="1"/>
-      <text x="${(x1+x2)/2}" y="${padY - 11}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" font-weight="600" fill="${'#fdfaf0'}">${seg.type ? seg.type.toUpperCase() : 'u'+(i+1)}</text>
+      <rect x="${x1}" y="${padY - 28}" width="${x2-x1}" height="18" fill="${color}" opacity="0.85" stroke="#2a2418" stroke-width="1"/>
+      <text x="${(x1+x2)/2}" y="${padY - 14}" text-anchor="middle" font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#fdfaf0" letter-spacing="0.06em">${seg.type ? seg.type.toUpperCase() : 'u'+(i+1)}</text>
     `;
   });
 
   // boundary markers
   let boundaryMarks = '';
   boundaries.forEach((b, i) => {
-    if (i === 0 || i === boundaries.length - 1) return; // skip endpoints
+    if (i === 0 || i === boundaries.length - 1) return;
     const x = sToX(b);
     boundaryMarks += `
-      <line x1="${x}" y1="${padY - 26}" x2="${x}" y2="${H - 10}" stroke="${'#b4471f'}" stroke-width="1.4" stroke-dasharray="3 2"/>
-      <circle cx="${x}" cy="${padY - 30}" r="6" fill="${'#b4471f'}" stroke="${'#2a2418'}" stroke-width="1.5"
+      <line x1="${x}" y1="${padY - 32}" x2="${x}" y2="${H - 10}" stroke="#b4471f" stroke-width="1.4" stroke-dasharray="3 2"/>
+      <circle cx="${x}" cy="${padY - 36}" r="7" fill="#b4471f" stroke="#fdfaf0" stroke-width="2"
               style="cursor: pointer;" data-boundary="${i}" class="boundary-handle"/>
+      <text x="${x}" y="${padY - 33}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" font-weight="700" fill="#fdfaf0" pointer-events="none">×</text>
     `;
   });
 
   c.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
-      <h3 class="display" style="margin: 0; font-size: 22px;">Channel Units · longitudinal profile</h3>
+      <h3 class="display" style="margin: 0; font-size: 22px;">Channel Units · side view of the stream</h3>
       <div style="display: flex; gap: 10px; align-items: center;">
         ${whyButton('units')}
         <span class="tag" style="color: var(--rust);">stage 03</span>
       </div>
     </div>
-    <svg viewBox="0 0 ${W} ${H}" style="width: 100%; background: linear-gradient(180deg, #f0e8d6 0%, #e0d4b0 50%, #d0c290 100%); border: 1.5px solid var(--ink); cursor: ${state.unitsComplete ? 'default' : 'crosshair'};" id="unit-svg">
-      <!-- earth -->
-      <path d="${bedPath}" fill="${'#a89070'}" opacity="0.6"/>
-      <path d="${bedPath}" fill="url(#bank-pat)" opacity="0.4"/>
-      <!-- water -->
-      <path d="${waterPath}" fill="${'#4a6878'}" opacity="0.7"/>
-      <!-- bed line -->
-      <path d="${(() => {
-        let p = `M ${sToX(0)} ${padY + bedAt(0) * 280} `;
-        for (let sn = 0; sn <= 1; sn += 0.005) p += `L ${sToX(sn)} ${padY + bedAt(sn) * 280} `;
-        return p;
-      })()}" fill="none" stroke="${'#5a4f38'}" stroke-width="1.5"/>
-      <!-- segments -->
+    <svg viewBox="0 0 ${W} ${H}" style="width: 100%; background: linear-gradient(180deg, #e8d9b4 0%, #d4c094 70%, #b89c64 100%); border: 1.5px solid var(--ink); cursor: ${state.unitsComplete ? 'default' : 'crosshair'};" id="unit-svg">
+      <defs>
+        <pattern id="bank-pat" width="6" height="6" patternUnits="userSpaceOnUse">
+          <circle cx="2" cy="2" r="0.6" fill="#5a4f38" opacity="0.45"/>
+          <circle cx="4" cy="4" r="0.5" fill="#5a4f38" opacity="0.35"/>
+        </pattern>
+        <pattern id="grass-tip" width="14" height="6" patternUnits="userSpaceOnUse">
+          <path d="M 2 6 L 2 1 M 6 6 L 6 2 M 10 6 L 10 0" stroke="#6b7d4a" stroke-width="0.7" opacity="0.7"/>
+        </pattern>
+        <linearGradient id="water-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#7ea0b3"/>
+          <stop offset="50%" stop-color="#4a6878"/>
+          <stop offset="100%" stop-color="#1a2c38"/>
+        </linearGradient>
+        <linearGradient id="sky-tint" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#cbd9e0" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="#cbd9e0" stop-opacity="0"/>
+        </linearGradient>
+        ${poolTint}
+      </defs>
+
+      <!-- Sky / above-water atmosphere -->
+      <rect x="0" y="0" width="${W}" height="${padY}" fill="url(#sky-tint)"/>
+
+      <!-- Grass/bank texture above water -->
+      <rect x="0" y="${padY - 6}" width="${W}" height="6" fill="url(#grass-tip)" opacity="0.6"/>
+
+      <!-- Earth (bed and below) -->
+      <path d="${earthD}" fill="#a89070"/>
+      <path d="${earthD}" fill="url(#bank-pat)" opacity="0.5"/>
+
+      <!-- Water (full polygon) -->
+      <path d="${waterD}" fill="url(#water-grad)" opacity="0.92"/>
+
+      <!-- Pool deep tints (overlaid radial darker patches in pools) -->
+      ${TRUE_UNITS.map((u, idx) => {
+        if (u.type !== 'pool') return '';
+        const x1 = sToX(u.start), x2 = sToX(u.end);
+        const top = yFor(waterAt((u.start+u.end)/2));
+        const bottom = Math.max(yFor(bedAt((u.start+u.end)/2)), top + 60);
+        return `<ellipse cx="${(x1+x2)/2}" cy="${(top+bottom)/2 + 8}" rx="${(x2-x1)/2}" ry="${(bottom-top)/2}" fill="url(#pool-tint-${idx})"/>`;
+      }).join('')}
+
+      <!-- Substrate (cobbles & pebbles) -->
+      ${substrateRocks}
+
+      <!-- Surface effects (white water, ripples, glass reflections) -->
+      ${surfaceFx}
+
+      <!-- Bed line -->
+      <path d="${bedLineD}" fill="none" stroke="#5a4f38" stroke-width="1.6"/>
+
+      <!-- Water surface line -->
+      <path d="${waterSurfD}" fill="none" stroke="#fdfaf0" stroke-width="0.9" opacity="0.85"/>
+
+      <!-- Diagnostic icons floating above each TRUE unit (subtle hints, not labels) -->
+      ${TRUE_UNITS.map(u => {
+        const cx = sToX((u.start + u.end) / 2);
+        const yIco = padY - 44;
+        if (u.type === 'pool') {
+          return `<g transform="translate(${cx}, ${yIco})" opacity="0.28">
+            <path d="M -10 0 Q 0 8 10 0" fill="none" stroke="#2a2418" stroke-width="1.2"/>
+            <path d="M -7 -3 Q 0 4 7 -3" fill="none" stroke="#2a2418" stroke-width="1"/>
+          </g>`;
+        }
+        if (u.type === 'riffle') {
+          return `<g transform="translate(${cx}, ${yIco})" opacity="0.28">
+            <path d="M -10 2 L -6 -3 L -2 2 L 2 -3 L 6 2 L 10 -3" fill="none" stroke="#2a2418" stroke-width="1.4"/>
+          </g>`;
+        }
+        if (u.type === 'run') {
+          return `<g transform="translate(${cx}, ${yIco})" opacity="0.28">
+            <line x1="-10" y1="-1" x2="10" y2="-1" stroke="#2a2418" stroke-width="1.2"/>
+            <line x1="-10" y1="2" x2="10" y2="2" stroke="#2a2418" stroke-width="1.2"/>
+          </g>`;
+        }
+        return '';
+      }).join('')}
+
+      <!-- Segment classification bar -->
       ${segmentBands}
-      <!-- boundaries -->
+      <!-- Boundary handles -->
       ${boundaryMarks}
+
       <!-- BOS / TOS labels -->
-      <text x="${sToX(0)}" y="${H - 8}" text-anchor="start" font-family="JetBrains Mono" font-size="11" font-weight="600">BOS →</text>
-      <text x="${sToX(1)}" y="${H - 8}" text-anchor="end" font-family="JetBrains Mono" font-size="11" font-weight="600">→ TOS</text>
-      <text x="${W/2}" y="20" text-anchor="middle" font-family="Caveat" font-size="20" fill="${'#b4471f'}">flow direction →</text>
+      <text x="${sToX(0)}" y="${H - 10}" text-anchor="start" font-family="JetBrains Mono" font-size="11" font-weight="700">BOS →</text>
+      <text x="${sToX(1)}" y="${H - 10}" text-anchor="end" font-family="JetBrains Mono" font-size="11" font-weight="700">→ TOS</text>
+      <text x="${W/2}" y="22" text-anchor="middle" font-family="Caveat" font-size="22" fill="#b4471f">flow direction →</text>
     </svg>
     <div style="margin-top: 14px; display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start;">
       <div style="flex: 2; min-width: 280px;">
-        <h5 style="margin: 0 0 8px; font-size: 13px; font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 0.1em;">Step 1: Click on the profile to add unit boundaries</h5>
+        <h5 style="margin: 0 0 8px; font-size: 13px; font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 0.1em;">Step 1: Click the stream to mark unit boundaries</h5>
         <p style="margin: 0; font-size: 13px; color: var(--ink-soft); line-height: 1.5;">
-          A new unit starts where gradient, bedform, substrate, or flow changes. Aim for <b>${TRUE_UNITS.length}</b> distinct units along this reach. Click a boundary marker to remove it. Boundaries should be at least 1 channel-width apart.
+          Look for visual changes: <b style="color: var(--pool);">pools</b> are <b>deep, dark, glassy</b>; <b style="color: var(--riffle);">riffles</b> are <b>shallow with cobbles and white water</b>; <b style="color: var(--run);">runs</b> are <b>smooth and uniform</b> with subtle flow lines. Click a boundary marker (red ✕) to remove it. Aim for <b>${TRUE_UNITS.length}</b> distinct units.
         </p>
       </div>
       <div style="flex: 1; min-width: 200px; display: flex; gap: 6px; flex-wrap: wrap;">
@@ -1925,26 +2106,101 @@ function stageUnits() {
     el.appendChild(fb);
   }
 
-  // unit info panel
+  // unit info panel — now with mini stream illustrations for each type
   const info = document.createElement('div');
   info.className = 'panel';
   info.style.cssText = 'padding: 22px;';
+
+  // Mini stream illustration generator for each unit type
+  function unitMini(type) {
+    const mw = 240, mh = 90;
+    let bedPath, waterPath, contents = '';
+    if (type === 'pool') {
+      // Concave bed dipping down
+      bedPath = `M 0 30 L 30 35 Q 120 75 210 35 L 240 30`;
+      waterPath = `M 0 25 L 240 25 L 240 30 L 210 35 Q 120 75 30 35 L 0 30 Z`;
+      // Glassy reflection lines
+      for (let i = 0; i < 5; i++) {
+        const y = 35 + i * 6, x = 40 + (i % 3) * 60, len = 25 + (i*7) % 30;
+        contents += `<line x1="${x}" y1="${y}" x2="${x+len}" y2="${y}" stroke="#fdfaf0" stroke-width="0.6" opacity="0.3"/>`;
+      }
+      // Pool deep tint
+      contents += `<ellipse cx="120" cy="55" rx="80" ry="20" fill="#0d2230" opacity="0.45"/>`;
+    } else if (type === 'riffle') {
+      // Convex bed bumping up — water shallow
+      bedPath = `M 0 50 L 30 48 Q 120 30 210 48 L 240 50`;
+      waterPath = `M 0 28 L 240 28 L 240 50 L 210 48 Q 120 30 30 48 L 0 50 Z`;
+      // Visible cobbles
+      const rocks = [[40, 38, 5], [70, 33, 6], [105, 30, 7], [140, 31, 6.5], [175, 35, 5.5], [205, 40, 5]];
+      rocks.forEach(([x, y, r]) => {
+        contents += `<ellipse cx="${x}" cy="${y}" rx="${r}" ry="${r*0.8}" fill="rgb(80, 60, 40)" stroke="#2a2418" stroke-width="0.5"/>`;
+        contents += `<ellipse cx="${x-r*0.3}" cy="${y-r*0.4}" rx="${r*0.4}" ry="${r*0.2}" fill="#fdfaf0" opacity="0.2"/>`;
+      });
+      // White water foam
+      [[55, 30], [90, 28], [125, 27], [160, 28], [195, 30]].forEach(([x, y]) => {
+        contents += `<ellipse cx="${x}" cy="${y}" rx="8" ry="1.5" fill="#fdfaf0" opacity="0.8"/>`;
+      });
+    } else { // run
+      // Flat bed, smooth water
+      bedPath = `M 0 55 L 240 55`;
+      waterPath = `M 0 26 L 240 26 L 240 55 L 0 55 Z`;
+      // Gentle directional flow lines
+      for (let i = 0; i < 8; i++) {
+        const x = 20 + i * 28, y = 33 + (i % 3) * 8;
+        contents += `<path d="M ${x} ${y} q 6 -1 12 0" stroke="#fdfaf0" stroke-width="0.7" fill="none" opacity="0.35"/>`;
+      }
+      // A few small pebbles near bed
+      [[40, 50], [85, 51], [130, 50], [175, 51], [215, 49]].forEach(([x, y]) => {
+        contents += `<circle cx="${x}" cy="${y}" r="1.6" fill="rgb(120, 100, 70)" opacity="0.55"/>`;
+      });
+    }
+
+    return `<svg viewBox="0 0 ${mw} ${mh}" style="width: 100%; background: linear-gradient(180deg, #e8d9b4, #d4c094); border: 1px solid var(--ink); display: block;">
+      <defs>
+        <linearGradient id="mini-water-${type}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${type === 'pool' ? '#5a7e90' : type === 'riffle' ? '#a8c4d0' : '#7ea0b3'}"/>
+          <stop offset="100%" stop-color="${type === 'pool' ? '#1a2c38' : type === 'riffle' ? '#5a7e90' : '#3a5868'}"/>
+        </linearGradient>
+      </defs>
+      <!-- Earth below bed -->
+      <path d="${bedPath} L 240 90 L 0 90 Z" fill="#a89070"/>
+      <!-- Water -->
+      <path d="${waterPath}" fill="url(#mini-water-${type})" opacity="0.9"/>
+      ${contents}
+      <!-- Bed line -->
+      <path d="${bedPath}" fill="none" stroke="#5a4f38" stroke-width="1.2"/>
+    </svg>`;
+  }
+
+  const diagnostics = {
+    pool: ['Deep, dark water', 'Glassy, smooth surface', 'Bed dips down (concave)', 'Substrate hidden by depth'],
+    riffle: ['Shallow, light-colored water', 'White water / foam', 'Cobbles visible at/near surface', 'Bed bumps up (convex)'],
+    run: ['Medium depth, uniform', 'Smooth surface, gentle flow', 'Pebbles barely visible', 'Bed is flat'],
+  };
+
   info.innerHTML = `
-    <h4 class="display" style="margin: 0 0 12px; font-size: 18px;">Unit reference</h4>
-    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;">
+    <h4 class="display" style="margin: 0 0 6px; font-size: 18px;">Unit reference · what to look for</h4>
+    <p style="margin: 0 0 16px; font-size: 13px; color: var(--ink-soft); font-style: italic;">Compare these patterns to the stream above.</p>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
       ${['pool','riffle','run'].map(t => `
-        <div style="border-left: 4px solid ${UNIT_COLORS[t]}; padding: 10px 14px; background: ${UNIT_COLORS[t]}15;">
-          <div style="display: flex; justify-content: space-between; align-items: baseline;">
-            <h5 class="display" style="margin: 0; font-size: 18px; color: ${UNIT_COLORS[t]};">${UNIT_INFO[t].name}</h5>
-            <span style="font-family: 'JetBrains Mono'; font-size: 10px; color: ${UNIT_COLORS[t]};">${t === 'riffle' ? '> 1%' : '< 1%'}</span>
+        <div style="border: 1.5px solid ${UNIT_COLORS[t]}; background: ${UNIT_COLORS[t]}12;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; padding: 8px 14px; background: ${UNIT_COLORS[t]}; color: #fdfaf0;">
+            <h5 class="display" style="margin: 0; font-size: 18px;">${UNIT_INFO[t].name}</h5>
+            <span style="font-family: 'JetBrains Mono'; font-size: 10px; opacity: 0.85;">${t === 'riffle' ? 'gradient > 1%' : 'gradient < 1%'}</span>
           </div>
-          <p style="margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: var(--ink-soft);">${UNIT_INFO[t].desc}</p>
+          ${unitMini(t)}
+          <div style="padding: 10px 14px;">
+            <ul style="margin: 0 0 10px; padding: 0; list-style: none; font-size: 12px; line-height: 1.6;">
+              ${diagnostics[t].map(d => `<li style="display: flex; gap: 6px; padding: 1px 0;"><span style="color: ${UNIT_COLORS[t]}; font-weight: 700;">▸</span><span>${d}</span></li>`).join('')}
+            </ul>
+            <p style="margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink-soft); font-style: italic; padding-top: 8px; border-top: 1px dotted var(--ink-faint);">${UNIT_INFO[t].desc}</p>
+          </div>
         </div>
       `).join('')}
     </div>
     <div style="margin-top: 14px; padding: 12px 14px; background: rgba(192,138,42,0.08); border-left: 3px solid var(--gold); font-size: 13px; line-height: 1.5;">
-      <b style="color: var(--gold); text-transform: uppercase; font-size: 11px; font-family: 'JetBrains Mono'; letter-spacing: 0.1em;">Why?</b>
-      Channel units organize the reach into habitats fish actually <i>use</i> differently. Riffles oxygenate water and support invertebrates; pools provide cover and slow-water rest; runs are travel corridors. Many subsequent measurements (substrate, undercuts, large wood) tie back to the unit they fall in.
+      <b style="color: var(--gold); text-transform: uppercase; font-size: 11px; font-family: 'JetBrains Mono'; letter-spacing: 0.1em;">Quick tip</b>
+      Channel units organize the reach into habitats fish use differently. Riffles oxygenate water and support invertebrates; pools provide cover and slow-water rest; runs are travel corridors. Many subsequent measurements (substrate, undercuts) tie back to the unit they fall in.
     </div>
   `;
   el.appendChild(info);
