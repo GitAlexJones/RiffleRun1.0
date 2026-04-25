@@ -1,4 +1,6 @@
 <!-- Stream Transect Simulator -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f0e8d6">
 <style>
   :root {
     --paper: #f0e8d6;
@@ -23,7 +25,9 @@
     --green-ok: #4a7d3d;
     --red-bad: #a83a2c;
   }
+  *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
     font-family: 'Newsreader', 'Iowan Old Style', 'Palatino', 'Book Antiqua', Georgia, serif;
     background:
@@ -172,6 +176,100 @@
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: var(--paper-2); }
   ::-webkit-scrollbar-thumb { background: var(--ink-soft); border: 2px solid var(--paper-2); }
+
+  /* ----- Responsive layout helpers ----- */
+  .stack-2col {
+    display: grid;
+    gap: 24px;
+    grid-template-columns: 1fr 360px;
+  }
+  @media (max-width: 900px) {
+    .stack-2col { grid-template-columns: 1fr; }
+    .stack-2col > .sidebar { order: 2; }
+  }
+
+  /* Bigger touch targets on smaller / touch screens */
+  @media (max-width: 900px) {
+    .btn { min-height: 44px; padding: 12px 20px; }
+    input[type="number"], input[type="text"], select { min-height: 40px; font-size: 14px; }
+  }
+
+  /* ----- Coach marks (teaching tooltips) ----- */
+  .coach {
+    position: fixed;
+    z-index: 150;
+    max-width: 320px;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 14px 16px 12px;
+    box-shadow: 4px 4px 0 var(--rust), 0 12px 32px rgba(0,0,0,0.25);
+    font-size: 14px;
+    line-height: 1.5;
+    animation: coach-in 0.35s ease-out;
+  }
+  .coach::after {
+    content: '';
+    position: absolute;
+    width: 14px; height: 14px;
+    background: var(--ink);
+    transform: rotate(45deg);
+  }
+  .coach.arrow-top::after    { top: -7px;    left: 24px; }
+  .coach.arrow-left::after   { left: -7px;   top: 50%; margin-top: -7px; }
+  .coach.arrow-right::after  { right: -7px;  top: 50%; margin-top: -7px; }
+  .coach.arrow-bottom::after { bottom: -7px; left: 24px; }
+  .coach .coach-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--rust-soft);
+    margin-bottom: 6px;
+  }
+  .coach .coach-body { color: var(--paper); }
+  .coach .coach-dismiss {
+    margin-top: 10px;
+    background: transparent;
+    border: 1px solid var(--paper);
+    color: var(--paper);
+    padding: 6px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .coach .coach-dismiss:hover { background: var(--paper); color: var(--ink); }
+  @keyframes coach-in {
+    from { opacity: 0; transform: scale(0.94); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  /* Spotlight ring for the coach target element */
+  .coach-spotlight {
+    position: fixed;
+    z-index: 149;
+    pointer-events: none;
+    border: 3px solid var(--rust);
+    box-shadow: 0 0 0 9999px rgba(40,30,10,0.5);
+    animation: coach-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes coach-pulse {
+    0%, 100% { box-shadow: 0 0 0 9999px rgba(40,30,10,0.45), 0 0 0 0 var(--rust); }
+    50% { box-shadow: 0 0 0 9999px rgba(40,30,10,0.55), 0 0 0 8px rgba(180,71,31,0.3); }
+  }
+
+  /* Make HTML inputs not zoom on iOS */
+  @media (max-width: 600px) {
+    input, select, button { font-size: 16px; }
+  }
+
+  /* Print friendliness */
+  @media print {
+    body::before { display: none; }
+    .toast-stack, .coach, .coach-spotlight { display: none !important; }
+    .panel { box-shadow: none; break-inside: avoid; }
+  }
 </style>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -194,8 +292,296 @@ function toast(msg, kind = 'info', ms = 3500) {
   el.className = `toast ${kind}`;
   el.innerHTML = msg;
   toastEl.appendChild(el);
+  // tiny notification chirp for toasts
+  if (kind === 'ok') sfx.success();
+  else if (kind === 'bad') sfx.error();
+  else sfx.notify();
   setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 350); }, ms);
 }
+
+// ---------- AUDIO SYSTEM ----------
+// All sounds are synthesized in real time via Web Audio API — no asset files,
+// keeps the simulator self-contained. Mute toggle persists in localStorage.
+const audioState = {
+  ctx: null,
+  muted: (() => {
+    try { return localStorage.getItem('riffleRunMuted') === '1'; } catch (e) { return false; }
+  })(),
+  unlocked: false,
+};
+function setMuted(m) {
+  audioState.muted = m;
+  try { localStorage.setItem('riffleRunMuted', m ? '1' : '0'); } catch (e) {}
+  // Update mute toggle if visible
+  const btn = document.getElementById('mute-btn');
+  if (btn) btn.textContent = m ? '🔇 Sound off' : '🔊 Sound on';
+}
+function ensureAudio() {
+  if (audioState.ctx) return audioState.ctx;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    audioState.ctx = new Ctx();
+  } catch (e) { return null; }
+  return audioState.ctx;
+}
+// Audio "unlock" — most browsers require a user gesture before playing
+document.addEventListener('pointerdown', () => {
+  if (audioState.unlocked) return;
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') ctx.resume();
+  audioState.unlocked = true;
+}, { once: false });
+
+// Helper: generate a quick envelope-shaped tone
+function tone({ freq = 440, duration = 0.18, type = 'sine', attack = 0.005, release = 0.08, volume = 0.18, freqEnd = null, delay = 0 }) {
+  if (audioState.muted) return;
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  const now = ctx.currentTime + delay;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, now);
+  if (freqEnd != null) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freqEnd), now + duration);
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(volume, now + attack);
+  gain.gain.linearRampToValueAtTime(volume * 0.6, now + duration - release);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(now);
+  osc.stop(now + duration + 0.02);
+}
+// Helper: short noise burst (for splashes/clicks)
+function noise({ duration = 0.12, volume = 0.08, filterFreq = 1500, filterQ = 1, lowpass = true, delay = 0 }) {
+  if (audioState.muted) return;
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  const now = ctx.currentTime + delay;
+  const len = Math.max(1, Math.floor(ctx.sampleRate * duration));
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const filt = ctx.createBiquadFilter();
+  filt.type = lowpass ? 'lowpass' : 'bandpass';
+  filt.frequency.value = filterFreq;
+  filt.Q.value = filterQ;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(volume, now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+  src.connect(filt).connect(gain).connect(ctx.destination);
+  src.start(now);
+}
+
+// Named sound effects per interaction
+const sfx = {
+  // Water drop / tap on stream — soft "ploop"
+  waterDrop() {
+    tone({ freq: 480, freqEnd: 220, duration: 0.16, type: 'sine', volume: 0.16, attack: 0.002, release: 0.05 });
+    noise({ duration: 0.05, volume: 0.04, filterFreq: 800 });
+  },
+  // Pin / flag set — wooden tap
+  pinSet() {
+    tone({ freq: 320, freqEnd: 220, duration: 0.07, type: 'triangle', volume: 0.13, attack: 0.001, release: 0.02 });
+    noise({ duration: 0.03, volume: 0.05, filterFreq: 2200 });
+  },
+  // Depth rod measurement — splash + tone pitched by depth
+  depthRod(depthMeters = 0.3) {
+    // Deeper measurements → lower pitch
+    const freq = 600 - Math.min(0.9, depthMeters) * 350;
+    noise({ duration: 0.18, volume: 0.07, filterFreq: 2000 });
+    tone({ freq, freqEnd: freq * 0.7, duration: 0.22, type: 'sine', volume: 0.12, delay: 0.02 });
+  },
+  // Channel-unit boundary — soft chime
+  chime() {
+    tone({ freq: 660, duration: 0.14, type: 'sine', volume: 0.12 });
+    tone({ freq: 880, duration: 0.18, type: 'sine', volume: 0.08, delay: 0.04 });
+  },
+  // Particle picked up — small dry "click"
+  particlePick() {
+    tone({ freq: 220, freqEnd: 180, duration: 0.04, type: 'square', volume: 0.06 });
+    noise({ duration: 0.04, volume: 0.04, filterFreq: 3000, lowpass: false });
+  },
+  // Correct answer
+  success() {
+    tone({ freq: 523.25, duration: 0.10, type: 'sine', volume: 0.13 }); // C
+    tone({ freq: 783.99, duration: 0.16, type: 'sine', volume: 0.12, delay: 0.08 }); // G
+  },
+  // Wrong / soft fail
+  error() {
+    tone({ freq: 220, duration: 0.10, type: 'sine', volume: 0.10 });
+    tone({ freq: 165, duration: 0.16, type: 'sine', volume: 0.10, delay: 0.07 });
+  },
+  // Generic notification
+  notify() {
+    tone({ freq: 880, duration: 0.06, type: 'sine', volume: 0.05 });
+  },
+  // Stage complete — ascending chord
+  stageComplete() {
+    tone({ freq: 392.00, duration: 0.18, type: 'sine', volume: 0.12 });             // G
+    tone({ freq: 523.25, duration: 0.20, type: 'sine', volume: 0.12, delay: 0.10 }); // C
+    tone({ freq: 659.25, duration: 0.24, type: 'sine', volume: 0.13, delay: 0.20 }); // E
+    tone({ freq: 783.99, duration: 0.30, type: 'sine', volume: 0.13, delay: 0.30 }); // G
+  },
+  // Page / button tick
+  tick() {
+    tone({ freq: 1000, duration: 0.025, type: 'square', volume: 0.04 });
+  },
+  // Toggle
+  toggle() {
+    tone({ freq: 700, duration: 0.04, type: 'triangle', volume: 0.07 });
+  },
+};
+window.__sfx = sfx;
+
+// ---------- COACH MARK SYSTEM ----------
+// Shows a friendly tooltip the first time a user reaches a new interaction,
+// pointing at a target element. Each coach mark fires once per session.
+const seenCoachMarks = new Set();
+let activeCoach = null;
+let activeSpotlight = null;
+
+const COACH_MARKS = {
+  layout_first_click: {
+    stage: 'layout',
+    when: () => state.bankfullMeasurements.length === 0 && state.stage === 'layout',
+    targetSelector: '#layout-svg',
+    label: 'Coach mark · 1 of 1',
+    body: 'See the pulsing red ring on the stream? <b>Click it</b>. That records your first bankfull-width measurement at the bottom of the site. Four more to go after this.',
+    arrow: 'top',
+  },
+  layout_transects: {
+    stage: 'layout',
+    when: () => state.bankfullMeasurements.length === 5 && state.transectsPlaced === 0 && state.stage === 'layout',
+    targetSelector: '#layout-svg',
+    label: 'New step',
+    body: "Now place <b>11 transects</b> upstream. The simulator highlights where each one goes — just click near the red dashed line.",
+    arrow: 'top',
+  },
+  crosssection_first: {
+    stage: 'crosssection',
+    when: () => state.csMeasurements.length === 0 && state.stage === 'crosssection',
+    targetSelector: '#cs-svg',
+    label: 'Coach mark',
+    body: 'You\'re looking <b>across</b> the channel now (side view). Click where the dashed line meets the bankfull tape — the rod measures bed depth. Repeat 11 times to map the channel shape.',
+    arrow: 'top',
+  },
+  units_first: {
+    stage: 'units',
+    when: () => state.unitBoundaries.length === 2 && state.stage === 'units',
+    targetSelector: '#unit-svg',
+    label: 'Coach mark',
+    body: '<b>Click the profile</b> wherever you see a habitat change — like a step into deeper water (pool) or coarser substrate (riffle). Add as many boundaries as you see distinct units, then classify each.',
+    arrow: 'top',
+  },
+  substrate_choose: {
+    stage: 'substrate',
+    when: () => state.substrateCrossSections.length === 0 && state.stage === 'substrate',
+    targetSelector: '#sub-svg',
+    label: 'Coach mark',
+    body: '<b>Click in riffles first</b> (the orange bands) — riffles get sampling priority because their substrate matters most for spawning fish. Place 6 cross-sections total.',
+    arrow: 'top',
+  },
+  substrate_pick: {
+    stage: 'substrate',
+    when: () => state.substrateCrossSections.length === 6 && state.substratePicks.length === 0 && state.stage === 'substrate',
+    targetSelector: '#sub-game',
+    label: 'New step · particle picking',
+    body: "Imagine reaching down without looking and picking up the first particle you feel. Match it to the gravelometer template on the right — pick the <b>smallest opening it doesn't fit through</b>.",
+    arrow: 'right',
+  },
+  undercut_first: {
+    stage: 'undercut',
+    when: () => state.undercutDecisions.length === 0 && state.stage === 'undercut',
+    targetSelector: '#uc-grid',
+    label: 'Coach mark',
+    body: 'Each card shows a candidate undercut. <b>Read the four criteria</b> (✓ = passes, ✗ = fails) and decide whether to <b>Record</b> it as habitat or <b>Skip</b> it. All four must pass to qualify.',
+    arrow: 'top',
+  },
+};
+
+function dismissCoach() {
+  if (activeCoach) { activeCoach.remove(); activeCoach = null; }
+  if (activeSpotlight) { activeSpotlight.remove(); activeSpotlight = null; }
+}
+
+function maybeShowCoach() {
+  for (const [key, mark] of Object.entries(COACH_MARKS)) {
+    if (seenCoachMarks.has(key)) continue;
+    if (mark.stage !== state.stage) continue;
+    if (!mark.when()) continue;
+    showCoach(key, mark);
+    return; // one at a time
+  }
+}
+
+function showCoach(key, mark) {
+  const target = document.querySelector(mark.targetSelector);
+  if (!target) return;
+  seenCoachMarks.add(key);
+  const r = target.getBoundingClientRect();
+
+  // Spotlight ring around the target (clamped to viewport)
+  const sl = document.createElement('div');
+  sl.className = 'coach-spotlight';
+  const left = Math.max(8, r.left - 4);
+  const top = Math.max(8, r.top - 4);
+  const width = Math.min(window.innerWidth - 16, r.width + 8);
+  const height = Math.min(window.innerHeight - 16, r.height + 8);
+  sl.style.cssText = `left: ${left}px; top: ${top}px; width: ${width}px; height: ${height}px;`;
+  document.body.appendChild(sl);
+  activeSpotlight = sl;
+
+  // Coach card
+  const card = document.createElement('div');
+  card.className = `coach arrow-${mark.arrow || 'top'}`;
+  card.innerHTML = `
+    <div class="coach-label">${mark.label}</div>
+    <div class="coach-body">${mark.body}</div>
+    <button class="coach-dismiss">Got it</button>
+  `;
+  document.body.appendChild(card);
+  // Position the card relative to target
+  const cardRect = card.getBoundingClientRect();
+  let cardLeft, cardTop;
+  switch (mark.arrow) {
+    case 'left':
+      cardLeft = r.right + 16;
+      cardTop = r.top + r.height/2 - cardRect.height/2;
+      break;
+    case 'right':
+      cardLeft = r.left - cardRect.width - 16;
+      cardTop = r.top + r.height/2 - cardRect.height/2;
+      break;
+    case 'bottom':
+      cardLeft = r.left + 20;
+      cardTop = r.top - cardRect.height - 16;
+      break;
+    case 'top':
+    default:
+      cardLeft = r.left + 20;
+      cardTop = r.bottom + 16;
+      break;
+  }
+  // Clamp to viewport
+  cardLeft = Math.max(12, Math.min(window.innerWidth - cardRect.width - 12, cardLeft));
+  cardTop = Math.max(12, Math.min(window.innerHeight - cardRect.height - 12, cardTop));
+  card.style.left = cardLeft + 'px';
+  card.style.top = cardTop + 'px';
+
+  card.querySelector('.coach-dismiss').addEventListener('click', dismissCoach);
+  // Auto-dismiss when user clicks the target (they got the message)
+  const onTargetClick = () => { dismissCoach(); target.removeEventListener('click', onTargetClick); };
+  target.addEventListener('click', onTargetClick, { once: true });
+
+  activeCoach = card;
+}
+
+// Re-position coach on resize/scroll
+window.addEventListener('resize', () => dismissCoach());
 
 // ---------- APP STATE ----------
 const state = {
@@ -262,13 +648,17 @@ function centerlineAt(s) {
 // =====================================================================
 const root = document.getElementById('app');
 function render() {
+  // Dismiss any open coach mark before re-rendering (anchors will be stale)
+  dismissCoach();
   root.innerHTML = '';
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'max-width: 1180px; margin: 0 auto; padding: 32px 28px 40px;';
+  wrap.style.cssText = 'max-width: 1480px; margin: 0 auto; padding: clamp(16px, 3vw, 36px) clamp(14px, 3vw, 32px) 40px;';
   wrap.appendChild(renderHeader());
   wrap.appendChild(renderStage());
   wrap.appendChild(renderFooter());
   root.appendChild(wrap);
+  // Show coach marks for the current stage if not yet seen
+  setTimeout(() => maybeShowCoach(), 100);
 }
 
 function renderFooter() {
@@ -303,7 +693,7 @@ function renderHeader() {
   h.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap;">
       <div>
-        <h1 class="display" style="font-size: clamp(48px, 8vw, 96px); margin: 0; line-height: 0.9; font-weight: 600;">
+        <h1 class="display" style="font-size: clamp(40px, 7vw, 88px); margin: 0; line-height: 0.9; font-weight: 600;">
           Riffle
           <span style="display: inline-block; transform: rotate(-2deg); color: var(--rust);">Run</span>
           <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.28em; font-weight: 400; color: var(--ink-faint); letter-spacing: 0.05em; vertical-align: 0.9em; margin-left: -0.15em;">1.0</span>
@@ -315,7 +705,10 @@ function renderHeader() {
       <div class="hand" style="font-size: 22px; color: var(--rust); transform: rotate(2deg); text-align: right;">
         <div>${formatToday()}</div>
         <div style="font-size: 14px; color: var(--ink-faint);">crew: you, solo</div>
-        <button onclick="window.__openGlossary()" class="btn btn-ghost" style="margin-top: 10px; font-size: 10px; padding: 4px 10px; transform: rotate(-2deg);">📖 Glossary</button>
+        <div style="margin-top: 10px; display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap;">
+          <button onclick="window.__toggleMute()" id="mute-btn" class="btn btn-ghost" style="font-size: 10px; padding: 4px 10px; transform: rotate(-1deg);">${audioState.muted ? '🔇 Sound off' : '🔊 Sound on'}</button>
+          <button onclick="window.__openGlossary()" class="btn btn-ghost" style="font-size: 10px; padding: 4px 10px; transform: rotate(-2deg);">📖 Reference</button>
+        </div>
       </div>
     </div>
     <div style="display: flex; gap: 0; margin-top: 28px; border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink); padding: 8px 0; flex-wrap: wrap;">
@@ -366,9 +759,9 @@ function renderStage() {
 function stageIntro() {
   const el = document.createElement('div');
   el.innerHTML = `
-    <div class="panel" style="padding: 36px; margin-bottom: 24px; display: grid; grid-template-columns: 1.3fr 1fr; gap: 32px; align-items: center;">
+    <div class="panel" style="padding: clamp(20px, 3vw, 36px); margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 32px; align-items: center;">
       <div>
-        <h2 class="display" style="font-size: 36px; margin: 0 0 16px; line-height: 1.1;">Welcome to <span style="color: var(--rust);">Coyote Creek</span>.</h2>
+        <h2 class="display" style="font-size: 36px; margin: 0 0 16px; line-height: 1.1;">Welcome to <span style="color: var(--rust);">Big Fish Creek</span>.</h2>
         <p style="font-size: 16px; line-height: 1.65; color: var(--ink-soft); margin-bottom: 16px;">
           You're a field tech assigned to assess a 110-meter stretch of stream for fish habitat.
           Across five stages, you'll learn the methodology biologists use across the Pacific Northwest:
@@ -379,7 +772,7 @@ function stageIntro() {
         </p>
         <div style="display: flex; gap: 10px; align-items: center; margin-top: 22px;">
           <button class="btn btn-primary" onclick="goStage('layout')">Begin fieldwork →</button>
-          <button class="btn btn-ghost" onclick="window.__openGlossary()">📖 Glossary first</button>
+          <button class="btn btn-ghost" onclick="window.__openGlossary()">📖 Reference first</button>
         </div>
       </div>
       <div style="position: relative;">
@@ -505,7 +898,7 @@ function introIllustrationSVG() {
 
     <!-- Title bar -->
     <g transform="translate(28, 28)">
-      <text font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#2a2418" letter-spacing="1.5">COYOTE CREEK · REACH 03-A</text>
+      <text font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#2a2418" letter-spacing="1.5">BIG FISH CREEK · REACH 03-A</text>
     </g>
     <!-- Scale -->
     <g transform="translate(28, 396)">
@@ -535,7 +928,7 @@ function introIllustrationSVG() {
 
 function stageLayout() {
   const el = document.createElement('div');
-  el.style.cssText = 'display: grid; grid-template-columns: 1fr 360px; gap: 24px;';
+  el.style.cssText = 'display: flex; flex-direction: column; gap: 24px;';
   el.appendChild(layoutCanvas());
   el.appendChild(layoutSidebar());
   return el;
@@ -544,17 +937,17 @@ function stageLayout() {
 function layoutCanvas() {
   const c = document.createElement('div');
   c.className = 'panel';
-  c.style.cssText = 'padding: 18px; position: relative; min-height: 540px;';
+  c.style.cssText = 'padding: 18px;';
 
-  const W = 800, H = 520;
-  const sToX = s => 40 + s * (W - 80) / STREAM.len;
-  const latToY = lat => H/2 + lat * 8;
+  const W = 1400, H = 600;
+  const sToX = s => 60 + s * (W - 120) / STREAM.len;
+  const latToY = lat => H/2 + lat * 12;
 
   // Smooth bank polygons
   const leftBank = [], rightBank = [], wetLeft = [], wetRight = [];
   for (let s = 0; s <= STREAM.len; s += 0.5) {
     const cy = latToY(centerlineAt(s));
-    const wPx = trueBankfullAt(s) * 3.5;
+    const wPx = trueBankfullAt(s) * 5.5;
     leftBank.push([sToX(s), cy - wPx * 0.5]);
     rightBank.push([sToX(s), cy + wPx * 0.5]);
     wetLeft.push([sToX(s), cy - wPx * 0.32]);
@@ -576,7 +969,7 @@ function layoutCanvas() {
   state.bankfullMeasurements.forEach((m, i) => {
     const x = sToX(m.s);
     const y = latToY(centerlineAt(m.s));
-    const wPx = m.value * 3.5;
+    const wPx = m.value * 5.5;
     measureMarkers += `
       <line x1="${x}" y1="${y - wPx*0.5 - 12}" x2="${x}" y2="${y + wPx*0.5 + 12}" stroke="#b4471f" stroke-width="1.4" stroke-dasharray="3 2"/>
       <circle cx="${x}" cy="${y}" r="4" fill="#b4471f" stroke="#fdfaf0" stroke-width="1.2"/>
@@ -611,7 +1004,7 @@ function layoutCanvas() {
       if (s > STREAM.len) continue;
       const x = sToX(s);
       const y = latToY(centerlineAt(s));
-      const w = trueBankfullAt(s) * 3.5;
+      const w = trueBankfullAt(s) * 5.5;
       const placed = t < nPlaced;
       const next = t === nPlaced && phase === 'transects';
       const color = placed ? '#4a7d3d' : (next ? '#b4471f' : '#8a7e60');
@@ -659,7 +1052,7 @@ function layoutCanvas() {
         for (let s = 2; s < STREAM.len; s += 6) {
           const x = sToX(s);
           const y = latToY(centerlineAt(s));
-          const w = trueBankfullAt(s) * 3.5;
+          const w = trueBankfullAt(s) * 5.5;
           r += `<path d="M ${x-w*0.2} ${y - w*0.1} Q ${x} ${y - w*0.18} ${x+w*0.2} ${y - w*0.1}" stroke="#fdfaf0" stroke-width="0.5" fill="none" opacity="0.4"/>`;
         }
         return r;
@@ -674,11 +1067,11 @@ function layoutCanvas() {
       ${preview}
       ${transectMarks}
       <!-- Scale -->
-      <g transform="translate(40, ${H - 30})">
-        <line x1="0" y1="0" x2="${10 * (W-80)/STREAM.len}" y2="0" stroke="#2a2418" stroke-width="1.5"/>
+      <g transform="translate(60, ${H - 30})">
+        <line x1="0" y1="0" x2="${10 * (W-120)/STREAM.len}" y2="0" stroke="#2a2418" stroke-width="1.5"/>
         <line x1="0" y1="-3" x2="0" y2="3" stroke="#2a2418" stroke-width="1.5"/>
-        <line x1="${10 * (W-80)/STREAM.len}" y1="-3" x2="${10 * (W-80)/STREAM.len}" y2="3" stroke="#2a2418" stroke-width="1.5"/>
-        <text x="${5 * (W-80)/STREAM.len}" y="-6" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5a4f38">10 m</text>
+        <line x1="${10 * (W-120)/STREAM.len}" y1="-3" x2="${10 * (W-120)/STREAM.len}" y2="3" stroke="#2a2418" stroke-width="1.5"/>
+        <text x="${5 * (W-120)/STREAM.len}" y="-6" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5a4f38">10 m</text>
       </g>
       <!-- Compass / flow -->
       <text x="${W-50}" y="30" font-family="Caveat" font-size="22" fill="#b4471f">flow →</text>
@@ -714,6 +1107,7 @@ function layoutCanvas() {
         const value = +(trueBankfullAt(s) + noise).toFixed(1);
         state.bankfullMeasurements.push({ s, value });
         addRipple(svg, e.clientX, e.clientY);
+        sfx.waterDrop();
         if (state.bankfullMeasurements.length === 5) {
           // Calculate average → width category
           const avg = state.bankfullMeasurements.reduce((a,b)=>a+b.value,0) / 5;
@@ -722,6 +1116,7 @@ function layoutCanvas() {
           const trueAvg = STREAM.samples.slice(0, Math.ceil(trueBfwAtBOS*8)).reduce((a,b)=>a+b.bfw,0) / Math.ceil(trueBfwAtBOS*8);
           if (Math.abs(avg - trueAvg) < 0.5) state.scoreNotes.layout.push('Bankfull widths well-measured.');
           state.score.layout += 50;
+          sfx.stageComplete();
           toast(`Average BFW = <b>${avg.toFixed(2)} m</b> → site width category <b>${state.widthCategory} m</b>`, 'ok', 4500);
         }
         render();
@@ -734,10 +1129,12 @@ function layoutCanvas() {
         }
         state.transectsPlaced++;
         addRipple(svg, e.clientX, e.clientY);
+        sfx.pinSet();
         if (state.transectsPlaced >= 11) {
           state.transectsLocked = true;
           state.score.layout += 50;
           state.scoreNotes.layout.push('All 11 transects placed at correct spacing.');
+          sfx.stageComplete();
           toast(`<b>Site complete.</b> 11 transects, ${(10 * state.widthCategory)} m total reach.`, 'ok', 5000);
         }
         render();
@@ -752,9 +1149,9 @@ function layoutCanvas() {
         <div style="display: flex; gap: 14px; align-items: flex-start;">
           <div class="hand" style="font-size: 36px; color: var(--rust); line-height: 1;">${i+1}/5</div>
           <div style="font-size: 14px; color: var(--ink-soft); line-height: 1.5;">
-            <b>Click in the stream</b> at the highlighted spot to take bankfull width measurement #${i+1}.
-            ${i === 0 ? `Start at the <b>bottom of site</b> (BOS).` : `Move <b>upstream by 1 bankfull width</b> from the previous measurement.`}
-            <br/><span style="color: var(--ink-faint); font-style: italic;">In the field, you'd be looking for slope breaks, vegetation lines, and stain marks to find bankfull elevation. Your measurement here includes a little simulated field error.</span>
+            <b>Click on the stream</b> at the pulsing red ring to measure how wide the channel is here. We're measuring <b>bankfull width</b> — the width of the channel when water just fills the banks.
+            ${i === 0 ? `Start at the <b>bottom of the site</b> — the marked "BOS" circle.` : `Move <b>upstream</b> by about one stream-width from your last measurement.`}
+            <br/><span style="color: var(--ink-faint); font-style: italic;">In real fieldwork you'd find bankfull by looking for slope breaks, vegetation lines, and stain marks. Your measurement here includes a bit of simulated field error.</span>
           </div>
         </div>`;
     } else if (phase === 'transects') {
@@ -762,17 +1159,16 @@ function layoutCanvas() {
         <div style="display: flex; gap: 14px; align-items: flex-start;">
           <div class="hand" style="font-size: 36px; color: var(--rust); line-height: 1;">${state.transectsPlaced+1}/11</div>
           <div style="font-size: 14px; color: var(--ink-soft); line-height: 1.5;">
-            Walk upstream and place <b>transect ${state.transectsPlaced+1}</b>, ${state.widthCategory}&nbsp;m from the previous one.
-            Click anywhere near the highlighted line.
-            <br/><span style="color: var(--ink-faint); font-style: italic;">Note: distances are <b>straight-line</b> — don't follow the thalweg around meander bends.</span>
+            Place <b>transect ${state.transectsPlaced+1}</b> — a sampling line across the channel — about ${state.widthCategory}&nbsp;m upstream from the last one. Click anywhere near the red dashed line.
+            <br/><span style="color: var(--ink-faint); font-style: italic;">Tip: distances are <b>straight line</b>, not following the curves of the stream.</span>
           </div>
         </div>`;
     } else {
       help.innerHTML = `
-        <div style="border-left: 3px solid var(--green-ok); padding: 12px 16px; background: rgba(74,125,61,0.08); display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+        <div style="border-left: 3px solid var(--green-ok); padding: 12px 16px; background: rgba(74,125,61,0.08); display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
           <div>
             <b>Site established.</b> Reach length: <span class="mono">${(10 * state.widthCategory)} m</span> · Width category: <span class="mono">${state.widthCategory} m</span>
-            <br/><span style="font-size: 13px; color: var(--ink-soft);">In the field, you'd now place site markers (rebar or trees) at the BOS and TOS for relocation.</span>
+            <br/><span style="font-size: 13px; color: var(--ink-soft);">In the field, you'd now mark the bottom and top of the site (rebar or a tagged tree) so you can find it again next year.</span>
           </div>
           <button class="btn btn-primary" onclick="goStage('crosssection')">Continue →</button>
         </div>`;
@@ -810,52 +1206,57 @@ function computeWidthCategory(avg) {
 
 function layoutSidebar() {
   const s = document.createElement('div');
-  s.className = 'panel';
-  s.style.cssText = 'padding: 22px; align-self: start; position: sticky; top: 20px;';
+  s.className = 'panel sidebar';
+  s.style.cssText = 'padding: 22px;';
 
   const measurements = state.bankfullMeasurements;
   const avg = measurements.length === 5 ? measurements.reduce((a,b)=>a+b.value,0)/5 : null;
 
   s.innerHTML = `
-    <h4 class="display" style="margin: 0 0 14px; font-size: 18px;">Field notes — site layout</h4>
-    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-soft); margin-bottom: 18px; line-height: 1.6;">
-      <div><b>SITE:</b> Coyote Creek 03-A</div>
-      <div><b>BOS UTM:</b> 10T 542819 E / 4768214 N</div>
-      <div><b>DATE:</b> ${formatToday()}</div>
-    </div>
-
-    <h5 style="margin: 14px 0 6px; font-size: 13px; font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 0.1em;">Bankfull widths</h5>
-    <table style="width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono'; font-size: 12px;">
-      ${[1,2,3,4,5].map(i => {
-        const m = measurements[i-1];
-        return `<tr style="border-bottom: 1px dotted var(--ink-faint);">
-          <td style="padding: 4px 0;">#${i}</td>
-          <td style="padding: 4px 0; text-align: right;">${m ? m.value.toFixed(1) + ' m' : '—'}</td>
-        </tr>`;
-      }).join('')}
-      <tr style="border-bottom: 2px solid var(--ink); font-weight: 600;">
-        <td style="padding: 6px 0;">avg</td>
-        <td style="padding: 6px 0; text-align: right;">${avg != null ? avg.toFixed(2) + ' m' : '—'}</td>
-      </tr>
-      <tr>
-        <td style="padding: 6px 0; color: var(--rust); font-weight: 600;">cat.</td>
-        <td style="padding: 6px 0; text-align: right; color: var(--rust); font-weight: 600;">${state.widthCategory ? state.widthCategory + ' m' : '—'}</td>
-      </tr>
-    </table>
-
-    <h5 style="margin: 22px 0 6px; font-size: 13px; font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 0.1em;">Transects</h5>
-    <div style="display: grid; grid-template-columns: repeat(11, 1fr); gap: 3px;">
-      ${[...Array(11)].map((_,i) => `
-        <div style="aspect-ratio: 1; border: 1px solid var(--ink); display: flex; align-items: center; justify-content: center; font-size: 10px; font-family: 'JetBrains Mono'; ${i < state.transectsPlaced ? 'background: var(--ink); color: var(--paper);' : ''}">${i+1}</div>
-      `).join('')}
-    </div>
-    <div style="font-size: 11px; color: var(--ink-faint); margin-top: 6px; font-style: italic;">
-      ${state.transectsPlaced}/11 placed at ${state.widthCategory ?? '—'} m spacing
-    </div>
-
-    <div style="margin-top: 22px; padding: 12px 14px; background: rgba(192,138,42,0.08); border-left: 3px solid var(--gold); font-size: 13px; line-height: 1.5;">
-      <b style="color: var(--gold); text-transform: uppercase; font-size: 11px; font-family: 'JetBrains Mono'; letter-spacing: 0.1em;">Why?</b><br/>
-      Site length scales with channel size — bigger streams need longer reaches to capture habitat variability. The protocol uses <b>10× width category</b> as a rule of thumb, with 5 widths averaged so a single weird measurement doesn't drag the whole survey.
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 28px;">
+      <div>
+        <h4 class="display" style="margin: 0 0 14px; font-size: 18px;">Field notes</h4>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-soft); line-height: 1.6;">
+          <div><b>SITE:</b> Big Fish Creek 03-A</div>
+          <div><b>BOS UTM:</b> 10T 542819 E / 4768214 N</div>
+          <div><b>DATE:</b> ${formatToday()}</div>
+        </div>
+      </div>
+      <div>
+        <h5 style="margin: 0 0 8px; font-size: 12px; font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 0.1em;">Bankfull widths</h5>
+        <table style="width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono'; font-size: 12px;">
+          ${[1,2,3,4,5].map(i => {
+            const m = measurements[i-1];
+            return `<tr style="border-bottom: 1px dotted var(--ink-faint);">
+              <td style="padding: 4px 0;">#${i}</td>
+              <td style="padding: 4px 0; text-align: right;">${m ? m.value.toFixed(1) + ' m' : '—'}</td>
+            </tr>`;
+          }).join('')}
+          <tr style="border-bottom: 2px solid var(--ink); font-weight: 600;">
+            <td style="padding: 6px 0;">avg</td>
+            <td style="padding: 6px 0; text-align: right;">${avg != null ? avg.toFixed(2) + ' m' : '—'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: var(--rust); font-weight: 600;">cat.</td>
+            <td style="padding: 6px 0; text-align: right; color: var(--rust); font-weight: 600;">${state.widthCategory ? state.widthCategory + ' m' : '—'}</td>
+          </tr>
+        </table>
+      </div>
+      <div>
+        <h5 style="margin: 0 0 8px; font-size: 12px; font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 0.1em;">Transects</h5>
+        <div style="display: grid; grid-template-columns: repeat(11, 1fr); gap: 3px;">
+          ${[...Array(11)].map((_,i) => `
+            <div style="aspect-ratio: 1; border: 1px solid var(--ink); display: flex; align-items: center; justify-content: center; font-size: 10px; font-family: 'JetBrains Mono'; ${i < state.transectsPlaced ? 'background: var(--ink); color: var(--paper);' : ''}">${i+1}</div>
+          `).join('')}
+        </div>
+        <div style="font-size: 11px; color: var(--ink-faint); margin-top: 6px; font-style: italic;">
+          ${state.transectsPlaced}/11 placed at ${state.widthCategory ?? '—'} m spacing
+        </div>
+      </div>
+      <div style="padding: 12px 14px; background: rgba(192,138,42,0.08); border-left: 3px solid var(--gold); font-size: 13px; line-height: 1.5;">
+        <b style="color: var(--gold); text-transform: uppercase; font-size: 11px; font-family: 'JetBrains Mono'; letter-spacing: 0.1em;">Why this works</b><br/>
+        Site length scales with channel size — bigger streams need longer reaches to capture habitat variability. The protocol uses <b>10× width category</b>, with 5 widths averaged so a single weird measurement doesn't drag the whole survey.
+      </div>
     </div>
   `;
   return s;
@@ -902,7 +1303,7 @@ function bedProfile(transect) {
 
 function stageCrossSection() {
   const el = document.createElement('div');
-  el.style.cssText = 'display: grid; grid-template-columns: 1fr 360px; gap: 24px;';
+  el.style.cssText = 'display: flex; flex-direction: column; gap: 24px;';
   el.appendChild(crossSectionCanvas());
   el.appendChild(crossSectionSidebar());
   return el;
@@ -911,17 +1312,17 @@ function stageCrossSection() {
 function crossSectionCanvas() {
   const c = document.createElement('div');
   c.className = 'panel';
-  c.style.cssText = 'padding: 18px; min-height: 540px;';
+  c.style.cssText = 'padding: 18px;';
 
   // Pick which transect we're on - cross sections are at every odd transect
   const oddTransects = [1, 3, 5, 7, 9, 11];
   const ti = state.csTransect;
 
   const profile = bedProfile(ti);
-  const W = 800, H = 480;
-  const padX = 80, padY = 60;
+  const W = 1200, H = 560;
+  const padX = 100, padY = 80;
   const xnToPx = xn => padX + xn * (W - 2*padX);
-  const depthToY = d => padY + d * 200;  // 1m = 200px
+  const depthToY = d => padY + d * 280;  // 1m = 280px (was 200)
 
   // Draw the cross section
   // The bankfull width is normalized to [0,1] for drawing; underneath we
@@ -1108,6 +1509,7 @@ function crossSectionCanvas() {
         w_depth: Math.max(0, measured_w),
       });
       addRipple(svg, e.clientX, e.clientY);
+      sfx.depthRod(measured_bf);
       if (state.csMeasurements.length === 11) {
         state.csComplete = true;
         state.score.crosssection += 50;
@@ -1120,6 +1522,7 @@ function crossSectionCanvas() {
           const truth = profile.bedDepth(xn);
           return Math.abs(m.bf_depth - truth) < 0.08;
         }).length;
+        sfx.stageComplete();
         toast(`<b>Cross section logged.</b> Mean BF depth = ${meanD.toFixed(2)} m · ${close}/11 within field tolerance`, 'ok', 4500);
       }
       render();
@@ -1175,39 +1578,44 @@ function crossSectionCanvas() {
 
 function crossSectionSidebar() {
   const s = document.createElement('div');
-  s.className = 'panel';
-  s.style.cssText = 'padding: 22px; align-self: start;';
+  s.className = 'panel sidebar';
+  s.style.cssText = 'padding: 22px;';
 
   const ti = state.csTransect;
   const profile = bedProfile(ti);
 
   s.innerHTML = `
-    <h4 class="display" style="margin: 0 0 14px; font-size: 18px;">Cross-section log · T${ti}</h4>
-    <table style="width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono'; font-size: 11px;">
-      <thead>
-        <tr style="border-bottom: 2px solid var(--ink);">
-          <th style="text-align: left; padding: 6px 0;">#</th>
-          <th style="text-align: right; padding: 6px 4px;">x (m)</th>
-          <th style="text-align: right; padding: 6px 4px;">BF depth</th>
-          <th style="text-align: right; padding: 6px 0;">W depth</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${[...Array(11)].map((_, i) => {
-          const m = state.csMeasurements[i];
-          return `<tr style="border-bottom: 1px dotted var(--ink-faint);">
-            <td style="padding: 4px 0;">${i+1}</td>
-            <td style="padding: 4px 4px; text-align: right;">${m ? m.x_real.toFixed(2) : '—'}</td>
-            <td style="padding: 4px 4px; text-align: right; ${m ? '' : 'color: var(--ink-faint);'}">${m ? m.bf_depth.toFixed(2) : '—'}</td>
-            <td style="padding: 4px 0; text-align: right; ${m ? '' : 'color: var(--ink-faint);'}">${m ? m.w_depth.toFixed(2) : '—'}</td>
-          </tr>`;
-        }).join('')}
-      </tbody>
-    </table>
-
-    <div style="margin-top: 22px; padding: 12px 14px; background: rgba(192,138,42,0.08); border-left: 3px solid var(--gold); font-size: 13px; line-height: 1.5;">
-      <b style="color: var(--gold); text-transform: uppercase; font-size: 11px; font-family: 'JetBrains Mono'; letter-spacing: 0.1em;">Why?</b><br/>
-      <b>Bankfull depth</b> describes channel <i>capacity</i> — independent of today's flow. <b>Wetted depth</b> reflects current conditions and habitat for fish. The 11-point grid lets you compute mean depth, max depth, and cross-sectional area without a full bathymetric survey.
+    <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 28px;">
+      <div>
+        <h4 class="display" style="margin: 0 0 14px; font-size: 18px;">Cross-section log · T${ti}</h4>
+        <div style="overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono'; font-size: 11px; min-width: 320px;">
+            <thead>
+              <tr style="border-bottom: 2px solid var(--ink);">
+                <th style="text-align: left; padding: 6px 0;">#</th>
+                <th style="text-align: right; padding: 6px 4px;">x (m)</th>
+                <th style="text-align: right; padding: 6px 4px;">BF depth</th>
+                <th style="text-align: right; padding: 6px 0;">W depth</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${[...Array(11)].map((_, i) => {
+                const m = state.csMeasurements[i];
+                return `<tr style="border-bottom: 1px dotted var(--ink-faint);">
+                  <td style="padding: 4px 0;">${i+1}</td>
+                  <td style="padding: 4px 4px; text-align: right;">${m ? m.x_real.toFixed(2) : '—'}</td>
+                  <td style="padding: 4px 4px; text-align: right; ${m ? '' : 'color: var(--ink-faint);'}">${m ? m.bf_depth.toFixed(2) : '—'}</td>
+                  <td style="padding: 4px 0; text-align: right; ${m ? '' : 'color: var(--ink-faint);'}">${m ? m.w_depth.toFixed(2) : '—'}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style="padding: 14px 18px; background: rgba(192,138,42,0.08); border-left: 3px solid var(--gold); font-size: 13px; line-height: 1.55; align-self: start;">
+        <b style="color: var(--gold); text-transform: uppercase; font-size: 11px; font-family: 'JetBrains Mono'; letter-spacing: 0.1em;">Why this matters</b><br/>
+        <b>Bankfull depth</b> describes channel <i>capacity</i> — independent of today's flow. <b>Wetted depth</b> reflects current conditions and habitat for fish. The 11-point grid lets you compute mean depth, max depth, and cross-sectional area without a full bathymetric survey.
+      </div>
     </div>
   `;
   return s;
@@ -1240,8 +1648,8 @@ function stageUnits() {
   const el = document.createElement('div');
   el.style.cssText = 'display: grid; grid-template-columns: 1fr; gap: 24px;';
 
-  const W = 1100, H = 280;
-  const padX = 60, padY = 40;
+  const W = 1400, H = 360;
+  const padX = 80, padY = 50;
   const sToX = sn => padX + sn * (W - 2*padX);
 
   // Generate longitudinal water profile and bed profile
@@ -1271,19 +1679,19 @@ function stageUnits() {
   c.style.cssText = 'padding: 18px;';
 
   // bed path
-  let bedPath = `M ${sToX(0)} ${padY + bedAt(0) * 200} `;
-  for (let sn = 0; sn <= 1; sn += 0.005) bedPath += `L ${sToX(sn)} ${padY + bedAt(sn) * 200} `;
+  let bedPath = `M ${sToX(0)} ${padY + bedAt(0) * 280} `;
+  for (let sn = 0; sn <= 1; sn += 0.005) bedPath += `L ${sToX(sn)} ${padY + bedAt(sn) * 280} `;
   bedPath += ` L ${sToX(1)} ${H} L ${sToX(0)} ${H} Z`;
 
   // water path
-  let waterPath = `M ${sToX(0)} ${padY + waterAt(0) * 200} `;
+  let waterPath = `M ${sToX(0)} ${padY + waterAt(0) * 280} `;
   for (let sn = 0; sn <= 1; sn += 0.005) {
     const w = waterAt(sn);
     const b = bedAt(sn);
     const ws = Math.min(w, b);
     waterPath += `L ${sToX(sn)} ${padY + ws * 200} `;
   }
-  for (let sn = 1; sn >= 0; sn -= 0.005) waterPath += `L ${sToX(sn)} ${padY + bedAt(sn) * 200} `;
+  for (let sn = 1; sn >= 0; sn -= 0.005) waterPath += `L ${sToX(sn)} ${padY + bedAt(sn) * 280} `;
   waterPath += 'Z';
 
   // user boundaries
@@ -1328,8 +1736,8 @@ function stageUnits() {
       <path d="${waterPath}" fill="${'#4a6878'}" opacity="0.7"/>
       <!-- bed line -->
       <path d="${(() => {
-        let p = `M ${sToX(0)} ${padY + bedAt(0) * 200} `;
-        for (let sn = 0; sn <= 1; sn += 0.005) p += `L ${sToX(sn)} ${padY + bedAt(sn) * 200} `;
+        let p = `M ${sToX(0)} ${padY + bedAt(0) * 280} `;
+        for (let sn = 0; sn <= 1; sn += 0.005) p += `L ${sToX(sn)} ${padY + bedAt(sn) * 280} `;
         return p;
       })()}" fill="none" stroke="${'#5a4f38'}" stroke-width="1.5"/>
       <!-- segments -->
@@ -1379,6 +1787,7 @@ function stageUnits() {
         ? [...state.unitClassifications, null]
         : state.unitClassifications.slice(0, state.unitBoundaries.length - 1);
       addRipple(svg, e.clientX, e.clientY);
+      sfx.chime();
       render();
     });
     // Boundary handle clicks → remove
@@ -1436,7 +1845,7 @@ function stageUnits() {
         </div>
       `;
     }
-    window.__classify = (i, t) => { state.unitClassifications[i] = t; render(); };
+    window.__classify = (i, t) => { state.unitClassifications[i] = t; sfx.toggle(); render(); };
     window.__finishUnits = () => {
       // Compare to TRUE_UNITS
       let correct = 0, total = state.unitClassifications.length;
@@ -1456,6 +1865,7 @@ function stageUnits() {
       const boundaryDelta = Math.abs(state.unitBoundaries.length - 1 - TRUE_UNITS.length);
       if (boundaryDelta === 0) state.scoreNotes.units.push('Correct number of channel units identified.');
       else state.scoreNotes.units.push(`Identified ${state.unitBoundaries.length - 1} units; ${TRUE_UNITS.length} are present.`);
+      if (pct >= 70) sfx.stageComplete(); else sfx.notify();
       toast(`<b>${correct}/${total} units classified correctly</b> (${pct.toFixed(0)}%)`, pct >= 70 ? 'ok' : 'info', 5000);
       render();
     };
@@ -1572,8 +1982,8 @@ function substrateChoosePanel(segments, riffles) {
   c.className = 'panel';
   c.style.cssText = 'padding: 22px;';
 
-  const W = 1100, H = 110;
-  const padX = 60;
+  const W = 1400, H = 130;
+  const padX = 80;
   const sToX = sn => padX + sn * (W - 2*padX);
 
   // Build profile-like band
@@ -1638,6 +2048,7 @@ function substrateChoosePanel(segments, riffles) {
       const seg = segments.find(s => sn >= s.start && sn <= s.end);
       state.substrateCrossSections.push({ position: sn, unitType: seg?.type, unitIdx: seg?.idx });
       addRipple(svg, e.clientX, e.clientY);
+      sfx.pinSet();
       render();
     });
     window.__resetCS = () => { state.substrateCrossSections = []; state.substratePicks = []; render(); };
@@ -1728,6 +2139,10 @@ function substrateSamplePanel() {
 
     state.substrateComplete = true;
     state.score.substrate = 100;
+    if (!state._substrateFinalSoundPlayed) {
+      sfx.stageComplete();
+      state._substrateFinalSoundPlayed = true;
+    }
     if (meanFinesPct != null) state.scoreNotes.substrate.push(`Mean cobble embeddedness: ${meanFinesPct.toFixed(1)}%`);
     state.scoreNotes.substrate.push(`${state.substratePicks.length} particles measured across ${state.substrateCrossSections.length} cross-sections.`);
 
@@ -1846,7 +2261,7 @@ function drawParticleGame(container, csIdx, pointIdx) {
 
   // Two-column: left = particle visual + gravelometer, right = controls
   container.innerHTML = `
-    <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px;">
       <div>
         <div style="background: linear-gradient(180deg, #d4c094, #c0a878); border: 1.5px solid var(--ink); padding: 30px; min-height: 300px; position: relative;">
           <div style="position: absolute; top: 8px; left: 12px; font-family: 'JetBrains Mono'; font-size: 10px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.1em;">in your hand</div>
@@ -1884,6 +2299,7 @@ function drawParticleGame(container, csIdx, pointIdx) {
   `;
 
   window.__pickSize = (label) => {
+    sfx.particlePick();
     if (particle.kind === 'bedrock' && label !== 'bedrock') {
       toast('That looked like bedrock — record "bedrock".', 'bad', 2500);
       return;
@@ -1975,7 +2391,7 @@ function showEmbeddedness(callback) {
         <p style="margin: 0 0 18px; font-size: 13px; color: var(--ink-soft); line-height: 1.5;">
           For cobble-class particles (64–180 mm), estimate two things in the field:
         </p>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px;">
           <div>
             <div style="font-family: 'JetBrains Mono'; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px;">% Buried</div>
             <svg viewBox="0 0 100 100" style="width: 100%; background: ${'#a89070'}; border: 1.5px solid var(--ink);">
@@ -2084,6 +2500,7 @@ function stageUndercut() {
       const decision = { id, qualifies, correct };
       if (existing >= 0) state.undercutDecisions[existing] = decision;
       else state.undercutDecisions.push(decision);
+      if (correct) sfx.success(); else sfx.error();
       render();
     };
     window.__finishUC = () => {
@@ -2093,6 +2510,7 @@ function stageUndercut() {
       state.undercutComplete = true;
       state.score.undercut = Math.round(pct);
       state.scoreNotes.undercut.push(`${correct}/${total} undercuts evaluated correctly (${pct.toFixed(0)}%).`);
+      sfx.stageComplete();
       render();
     };
 
@@ -2273,10 +2691,10 @@ function stageSummary() {
       <div style="font-family: 'JetBrains Mono'; font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink-faint); margin-bottom: 6px;">
         Habitat assessment summary · ${formatToday()}
       </div>
-      <h2 class="display" style="font-size: 44px; margin: 0; line-height: 1;">Coyote Creek <span style="color: var(--rust);">03-A</span></h2>
+      <h2 class="display" style="font-size: 44px; margin: 0; line-height: 1;">Big Fish Creek <span style="color: var(--rust);">03-A</span></h2>
       <p style="font-style: italic; color: var(--ink-soft); margin: 6px 0 22px; font-size: 16px;">Five-stage habitat assessment, single observer, training run.</p>
 
-      <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 28px;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 28px;">
         ${[
           ['Avg BFW', avgBfw + ' m', 'site layout'],
           ['Width category', (state.widthCategory ?? '—') + ' m', 'site layout'],
@@ -2301,7 +2719,7 @@ function stageSummary() {
           ['Substrate', state.score.substrate, state.scoreNotes.substrate],
           ['Undercut Banks', state.score.undercut, state.scoreNotes.undercut],
         ].map(([name, sc, notes]) => `
-          <div style="display: grid; grid-template-columns: 200px 100px 1fr; gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px dotted var(--ink-faint);">
+          <div style="display: grid; grid-template-columns: minmax(140px, 200px) minmax(80px, 100px) 1fr; gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px dotted var(--ink-faint);">
             <div style="font-family: 'JetBrains Mono'; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;">${name}</div>
             <div style="display: flex; align-items: center; gap: 8px;">
               <div style="flex: 1; height: 8px; background: var(--paper-shadow); border: 1px solid var(--ink); position: relative;">
@@ -2383,57 +2801,469 @@ function stageSummary() {
 function goStage(name) {
   state.stage = name;
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  sfx.tick();
   render();
 }
 window.goStage = goStage;
+window.__toggleMute = () => {
+  setMuted(!audioState.muted);
+  // Re-render header to update button text
+  if (!audioState.muted) sfx.toggle();
+};
 
 // =====================================================================
 // GLOSSARY (accessible from header)
 // =====================================================================
 const GLOSSARY = [
-  { term: 'Bankfull', def: 'The elevation at which water just begins to overflow the channel onto the floodplain. Indicators: change in slope, top of point bars, vegetation lines, change in bank materials. Bankfull flow has a 1–2 year recurrence interval and does most channel-shaping work.' },
-  { term: 'Wetted channel', def: 'The portion of the streambed currently covered by water. Typically narrower than the bankfull channel.' },
-  { term: 'Thalweg', def: 'The line of deepest flow along the channel — usually where a fish would swim through.' },
-  { term: 'Cross section', def: 'A vertical slice across the channel perpendicular to flow. Measured at every odd transect with bankfull and wetted depths.' },
-  { term: 'Channel unit', def: 'A localized, relatively homogeneous area of channel — pool, riffle, or run — distinguished by gradient, bedform, substrate, and flow character. Tier I habitat type.' },
-  { term: 'Pool', def: 'Low gradient (<1%), smooth flow, lateral and longitudinal concavity (the bed dips in two directions). Cover and rest habitat.' },
-  { term: 'Riffle', def: 'Steeper gradient (>1%), coarse substrate (cobble/boulder), turbulent flow. Oxygenates water; supports invertebrates; prime spawning gravel.' },
-  { term: 'Run', def: 'Low gradient like a pool but uniform depth and no concavity. Smooth laminar flow. Travel corridor.' },
-  { term: 'Substrate', def: 'The bed material — sand, gravel, cobble, boulder, bedrock. Sized by b-axis with a gravelometer.' },
-  { term: 'B-axis', def: 'The intermediate of three orthogonal axes of a particle. Used because it determines what size opening the particle can pass through.' },
-  { term: 'Cobble embeddedness', def: 'How buried a cobble is in fine sediment. Calculated as % buried × % surrounding fines / 100. High embeddedness = poor habitat (less interstitial space for invertebrates and fish eggs).' },
-  { term: 'Fines', def: 'Particles < 2 mm. Silt and clay (smooth between fingers) classified as "fines"; sand (gritty) classified as "sand".' },
-  { term: 'Gravelometer', def: 'A template with square openings used to classify particle b-axis size. Particle is recorded as the smallest opening it does NOT fit through.' },
-  { term: 'Undercut bank', def: 'A continuous cave-like feature in the streambank formed by overhanging material. Qualifies if depth ≥ 20 cm, length ≥ 1 m, ceiling ≤ 1 m above water, and provides cover.' },
-  { term: 'BOS / TOS', def: 'Bottom Of Site / Top Of Site. Surveys work upstream from BOS to TOS so disturbance of the bed doesn\'t affect downstream measurements.' },
-  { term: 'Width category', def: 'A standardized bucket the site falls into based on average bankfull width (6, 8, 10, 12, 14, 16, 18, 20 m). Determines transect spacing and total reach length.' },
+  // ===== Channel geometry & hydrology =====
+  { cat: 'Channel geometry', term: 'Bankfull', def: 'The elevation at which water just begins to overflow the channel onto the floodplain. Indicators: change in slope, top of point bars, vegetation lines, change in bank materials. Bankfull flow has a 1–2 year recurrence interval and does most channel-shaping work.' },
+  { cat: 'Channel geometry', term: 'Bankfull width (BFW)', def: 'Horizontal distance between the bankfull elevations on the left and right banks, measured perpendicular to flow. Reach-averaged BFW determines width category and transect spacing.' },
+  { cat: 'Channel geometry', term: 'Wetted channel', def: 'The portion of the streambed currently covered by water. Typically narrower than the bankfull channel. Wetted dimensions vary with discharge; bankfull dimensions do not.' },
+  { cat: 'Channel geometry', term: 'Wetted perimeter', def: 'The length of the wetted boundary in cross section (the contact line between water and bed/banks). Used in hydraulic radius calculations.' },
+  { cat: 'Channel geometry', term: 'Hydraulic radius (R)', def: 'Cross-sectional area ÷ wetted perimeter. A measure of channel "efficiency" — higher R means more water moves with less friction.' },
+  { cat: 'Channel geometry', term: 'Thalweg', def: 'The line of deepest flow along the channel — usually where a fish would migrate through. Tracks the dynamic axis of the stream and shifts with channel evolution.' },
+  { cat: 'Channel geometry', term: 'Cross section', def: 'A vertical slice across the channel perpendicular to flow. Measured at every odd transect with bankfull and wetted depths at 11 evenly spaced points.' },
+  { cat: 'Channel geometry', term: 'Floodplain', def: 'The flat area adjacent to the channel inundated by floods larger than bankfull. Functioning floodplains attenuate flood peaks, store sediment, and recharge groundwater.' },
+  { cat: 'Channel geometry', term: 'Terrace', def: 'An abandoned floodplain surface, now elevated above the active channel. Often confused with bankfull during site layout — terraces have soil structure and perennial vegetation; the active floodplain may not.' },
+  { cat: 'Channel geometry', term: 'Sinuosity', def: 'Ratio of channel length (along the thalweg) to valley length. Sinuosity > 1.5 is a meandering channel; < 1.3 is straight.' },
+  { cat: 'Channel geometry', term: 'Gradient', def: 'Channel slope, expressed as % or m/m. Riffles typically > 1%; pools and runs typically < 1%. Measured longitudinally over the reach.' },
+  { cat: 'Channel geometry', term: 'Reach', def: 'A stretch of stream with consistent geomorphic and hydraulic characteristics — the unit of analysis in habitat assessment.' },
+
+  // ===== Channel units =====
+  { cat: 'Channel units', term: 'Channel unit', def: 'A localized, relatively homogeneous area of channel — pool, riffle, or run — distinguished by gradient, bedform, substrate, and flow character. Tier I habitat type. Minimum length: typically 1 channel-width.' },
+  { cat: 'Channel units', term: 'Pool', def: 'Low gradient (<1%), smooth flow, lateral and longitudinal concavity (the bed dips in two directions). Cover and rest habitat. Subtypes: scour, plunge, dam, lateral-scour, trench.' },
+  { cat: 'Channel units', term: 'Riffle', def: 'Steeper gradient (>1%), coarse substrate (cobble/boulder), turbulent surface flow. Oxygenates water; supports invertebrates; prime spawning gravel for salmonids.' },
+  { cat: 'Channel units', term: 'Run (glide)', def: 'Low gradient like a pool but uniform depth and no concavity. Smooth laminar flow. Travel corridor; sometimes called a "glide" in low-gradient systems.' },
+  { cat: 'Channel units', term: 'Step-pool', def: 'Sequence of vertical steps (boulder/log dams) and short pools, common in steep mountain streams. Each step dissipates energy; pools store sediment.' },
+  { cat: 'Channel units', term: 'Cascade', def: 'Steep, fast, highly turbulent flow over a chaotic mix of boulders. Gradient typically > 4%. Few salmonids except as transient passage.' },
+  { cat: 'Channel units', term: 'Pool tail-out', def: 'The downstream end of a pool where water shallows and accelerates into the next unit. Critical spawning habitat for many salmonids.' },
+  { cat: 'Channel units', term: 'Pool-riffle ratio', def: 'A reach-level metric: total pool length ÷ total riffle length, or counts thereof. Healthy salmonid streams typically have a roughly balanced ratio (~1:1).' },
+
+  // ===== Substrate =====
+  { cat: 'Substrate', term: 'Substrate', def: 'The bed material — silt, sand, gravel, cobble, boulder, or bedrock. Sized by b-axis with a gravelometer or ruler. A primary control on benthic habitat and fish reproduction.' },
+  { cat: 'Substrate', term: 'B-axis', def: 'The intermediate of three orthogonal axes of a particle. Used because it determines what size square opening the particle can pass through. Always smaller than the longest (a-axis) and larger than the shortest (c-axis).' },
+  { cat: 'Substrate', term: 'Cobble embeddedness', def: 'How buried a cobble is in fine sediment. Calculated as % buried × % surrounding fines / 100. High embeddedness = poor habitat (less interstitial space for invertebrates and fish eggs).' },
+  { cat: 'Substrate', term: 'Fines', def: 'Particles < 2 mm. Silt and clay (smooth between fingers) classified as "fines"; sand (gritty) classified as "sand". Excessive fines indicate erosion problems upstream.' },
+  { cat: 'Substrate', term: 'Gravelometer', def: 'A template (typically a metal plate) with square openings used to classify particle b-axis size. Particle is recorded as the smallest opening it does NOT fit through.' },
+  { cat: 'Substrate', term: 'Wolman pebble count', def: 'A standardized random-walk sampling method where ~100 particles are blind-picked from the streambed and measured. The basis for D-statistics like D50, D84.' },
+  { cat: 'Substrate', term: 'D50 / D84 / D16', def: 'Percentile sizes from a particle-size distribution. D50 (median) is what most reports lead with; D84 indicates the size of "armor" stones; D16 marks fine-end mobility.' },
+  { cat: 'Substrate', term: 'Armoring', def: 'A bed condition where coarse particles concentrate at the surface, protecting finer material below. Indicates flow-regulated streams or sediment-starved reaches.' },
+  { cat: 'Substrate', term: 'Sorting', def: 'How uniform particle sizes are. Well-sorted = narrow size range; poorly sorted = wide range. Sorting tells you about flow energy variability.' },
+
+  // ===== Riparian & cover =====
+  { cat: 'Riparian & cover', term: 'Undercut bank', def: 'A continuous cave-like feature in the streambank formed by overhanging material (root mat, sod, rock). Qualifies as habitat if depth ≥ 20 cm, length ≥ 1 m, ceiling ≤ 1 m above water, and provides cover.' },
+  { cat: 'Riparian & cover', term: 'Large woody debris (LWD)', def: 'Wood pieces ≥ 10 cm diameter and ≥ 1 m long within the bankfull channel. Creates pools, traps sediment, provides cover. Counted by size class, location, and orientation.' },
+  { cat: 'Riparian & cover', term: 'Riparian zone', def: 'The vegetation community along stream banks. Provides shade (temperature control), root reinforcement (bank stability), allochthonous inputs (food web), and LWD recruitment.' },
+  { cat: 'Riparian & cover', term: 'Canopy cover', def: 'Percent of the channel shaded by overhead vegetation, measured with a densiometer. Drives water temperature, primary production, and habitat suitability for cold-water species.' },
+  { cat: 'Riparian & cover', term: 'Cover (fish)', def: 'Any feature that provides protection from predators or hydraulic stress: undercut banks, LWD, boulders, overhanging vegetation, deep water, turbulence. Quantified per unit.' },
+
+  // ===== Survey methodology =====
+  { cat: 'Survey methodology', term: 'Transect', def: 'A sampling line across the channel, perpendicular to flow. The basic spatial framework for systematic measurements; 11 transects span the reach in this protocol.' },
+  { cat: 'Survey methodology', term: 'BOS / TOS', def: 'Bottom Of Site / Top Of Site. Surveys work upstream from BOS to TOS so disturbance of the bed doesn\'t cloud water at downstream measurements.' },
+  { cat: 'Survey methodology', term: 'Width category', def: 'A standardized bucket the site falls into based on average bankfull width (6, 8, 10, 12, 14, 16, 18, 20 m). Determines transect spacing and total reach length (10× spacing).' },
+  { cat: 'Survey methodology', term: 'Site marker', def: 'A permanent physical reference (rebar with tag, or labeled tree) at BOS and TOS that allows the site to be relocated for re-survey in subsequent years.' },
+  { cat: 'Survey methodology', term: 'Densiometer', def: 'Convex or spherical mirror with a grid, held over the channel to estimate canopy cover. Readings averaged across cardinal directions.' },
+  { cat: 'Survey methodology', term: 'Stadia rod', def: 'Graduated measuring rod used vertically to read depths or horizontally with a level for elevation surveys. The "depth rod" in cross-section work.' },
+  { cat: 'Survey methodology', term: 'Bankfull indicators', def: 'Field cues used to identify bankfull elevation: slope break (vertical bank to horizontal floodplain), top of point bars, perennial-vegetation lower limit, change in bank particle size, undercut tops, stain lines.' },
+  { cat: 'Survey methodology', term: 'QA/QC', def: 'Quality assurance / quality control. In habitat surveys: independent re-measurement of a subset of transects to verify within-crew and between-crew precision.' },
+
+  // ===== Hydrology =====
+  { cat: 'Hydrology', term: 'Discharge (Q)', def: 'Volume of water passing a cross section per unit time (m³/s or cfs). Q = A × V where A is cross-sectional area and V is mean velocity.' },
+  { cat: 'Hydrology', term: 'Stage', def: 'Water surface elevation at a fixed point — read from a staff gauge. Stage-discharge curves convert easy stage readings into discharge estimates.' },
+  { cat: 'Hydrology', term: 'Manning equation', def: 'Empirical equation relating velocity to channel characteristics: V = (1/n)·R^(2/3)·S^(1/2). The standard for open-channel flow estimation.' },
+  { cat: 'Hydrology', term: 'Manning\'s n', def: 'Roughness coefficient. Smooth concrete ≈ 0.013; cobble streams ≈ 0.035; boulder/wood-jammed streams 0.05+. Selecting n is the largest source of uncertainty in Manning estimates.' },
+  { cat: 'Hydrology', term: 'Recurrence interval', def: 'Average time between flow events of a given magnitude. Bankfull flow is typically the 1.5-year event; the 100-year flood is the 1%-annual-exceedance event.' },
+  { cat: 'Hydrology', term: 'Base flow', def: 'The portion of streamflow from groundwater discharge — what\'s left when surface runoff has receded. Critical for cold-water fish in dry seasons.' },
+
+  // ===== Biota & habitat metrics =====
+  { cat: 'Biota & habitat', term: 'Salmonid', def: 'Family Salmonidae — salmon, trout, char, whitefish. The primary indicator group for Pacific Northwest stream habitat assessments.' },
+  { cat: 'Biota & habitat', term: 'Redd', def: 'A nest dug by a spawning female salmonid in clean gravel of a riffle or pool tail-out. Visible as an oval pit-and-mound feature; redd surveys quantify spawning use.' },
+  { cat: 'Biota & habitat', term: 'Macroinvertebrate', def: 'Aquatic insects and other invertebrates retained on a 500-µm net. Community composition is a sensitive indicator of water quality and substrate condition.' },
+  { cat: 'Biota & habitat', term: 'EPT taxa', def: 'Ephemeroptera (mayflies), Plecoptera (stoneflies), Trichoptera (caddisflies). Sensitive to pollution; high EPT diversity indicates good water quality.' },
+  { cat: 'Biota & habitat', term: 'Allochthonous input', def: 'Organic matter (leaves, wood, terrestrial insects) entering the stream from outside. The dominant energy source in small forested streams.' },
 ];
-window.__openGlossary = () => {
+
+const GLOSSARY_CATEGORIES = ['Channel geometry', 'Channel units', 'Substrate', 'Riparian & cover', 'Survey methodology', 'Hydrology', 'Biota & habitat'];
+
+const EQUATIONS = [
+  {
+    name: 'Average bankfull width',
+    formula: 'BFW<sub>avg</sub> = (W₁ + W₂ + W₃ + W₄ + W₅) / 5',
+    where: [
+      ['W₁ … W₅', 'five bankfull-width measurements taken at intervals of one bankfull width upstream from BOS'],
+    ],
+    example: {
+      title: 'Worked example',
+      given: 'W₁ = 6.8 m, W₂ = 7.2 m, W₃ = 6.5 m, W₄ = 7.4 m, W₅ = 7.1 m',
+      step: 'BFW<sub>avg</sub> = (6.8 + 7.2 + 6.5 + 7.4 + 7.1) / 5 = 35.0 / 5',
+      answer: 'BFW<sub>avg</sub> = 7.0 m',
+    },
+    note: 'Five-point average smooths out one-off measurements where indicators were ambiguous.',
+  },
+  {
+    name: 'Width category & site length',
+    formula: 'Look up BFW<sub>avg</sub> in the width-category table → spacing (S)<br>Site length L = 10 × S',
+    where: [
+      ['BFW<sub>avg</sub>', 'average bankfull width (m)'],
+      ['S', 'transect spacing (= width category, m)'],
+      ['L', 'total reach length (m)'],
+    ],
+    table: {
+      headers: ['BFW<sub>avg</sub> (m)', 'Category S (m)', 'Site length L (m)'],
+      rows: [
+        ['≤ 6', '6', '60'],
+        ['6.1 – 8.0', '8', '80'],
+        ['8.1 – 10.0', '10', '100'],
+        ['10.1 – 12.0', '12', '120'],
+        ['12.1 – 14.0', '14', '140'],
+        ['14.1 – 16.0', '16', '160'],
+        ['16.1 – 18.0', '18', '180'],
+        ['> 18', '20', '200'],
+      ],
+    },
+    example: {
+      title: 'Worked example',
+      given: 'BFW<sub>avg</sub> = 7.0 m',
+      step: '7.0 m falls in the 6.1–8.0 row → S = 8 m. Then L = 10 × 8',
+      answer: 'L = 80 m, with 11 transects spaced 8 m apart',
+    },
+    note: 'Bigger streams need longer reaches to capture habitat variability.',
+  },
+  {
+    name: 'Cross-section measurement interval',
+    formula: 'Δx = BFW<sub>local</sub> / 10',
+    where: [
+      ['BFW<sub>local</sub>', 'bankfull width at <i>this</i> transect (m)'],
+      ['Δx', 'horizontal spacing between depth-rod readings (m)'],
+    ],
+    example: {
+      title: 'Worked example',
+      given: 'At T3 the bankfull tape reads 6.4 m bank-to-bank',
+      step: 'Δx = 6.4 / 10',
+      answer: 'Δx = 0.64 m → take readings at 0, 0.64, 1.28, 1.92 … 6.40 m (11 points)',
+    },
+    note: 'BFW varies between transects — recompute Δx every time.',
+  },
+  {
+    name: 'Mean depth (cross section)',
+    formula: 'd̄ = (d₀ + d₁ + d₂ + … + d₁₀) / 11',
+    where: [
+      ['dᵢ', 'depth reading at point i (m); d₀ and d₁₀ are at the banks (≈ 0 for bankfull)'],
+      ['d̄', 'mean depth across the cross section (m)'],
+    ],
+    example: {
+      title: 'Worked example (bankfull depths)',
+      given: 'd = 0.0, 0.18, 0.42, 0.65, 0.81, 0.92, 0.88, 0.74, 0.50, 0.22, 0.0 m',
+      step: 'sum = 5.32 m → d̄ = 5.32 / 11',
+      answer: 'd̄ = 0.48 m',
+    },
+  },
+  {
+    name: 'Cross-sectional area (trapezoidal rule)',
+    formula: 'A = Σᵢ (Δxᵢ × (dᵢ + d<sub>i+1</sub>) / 2)',
+    where: [
+      ['Δxᵢ', 'horizontal spacing between adjacent points (m)'],
+      ['dᵢ, d<sub>i+1</sub>', 'depths at adjacent points (m)'],
+      ['A', 'cross-sectional area (m²)'],
+    ],
+    example: {
+      title: 'Worked example (first three intervals from above)',
+      given: 'Δx = 0.64 m; depths 0.0 → 0.18 → 0.42 → 0.65',
+      step: 'A₁ = 0.64 × (0.0 + 0.18)/2 = 0.058 m²<br>A₂ = 0.64 × (0.18 + 0.42)/2 = 0.192 m²<br>A₃ = 0.64 × (0.42 + 0.65)/2 = 0.342 m²<br>… continue across all 10 intervals and sum',
+      answer: 'For full profile above: A ≈ 3.04 m²',
+    },
+    note: 'Trapezoidal rule treats each strip between adjacent rod points as a trapezoid.',
+  },
+  {
+    name: 'Mean velocity & discharge (Manning, reference)',
+    formula: 'Q = A × V<br>V = (1/n) × R<sup>2/3</sup> × S<sup>1/2</sup>',
+    where: [
+      ['Q', 'discharge (m³/s)'],
+      ['A', 'cross-sectional area (m²)'],
+      ['V', 'mean velocity (m/s)'],
+      ['n', 'Manning roughness coefficient (≈ 0.035 for cobble streams)'],
+      ['R', 'hydraulic radius = A / wetted perimeter (m)'],
+      ['S', 'channel slope (m/m)'],
+    ],
+    note: 'This isn\'t computed in Riffle Run, but cross-section data feeds directly into it. Discharge estimation is the main reason cross sections are measured.',
+  },
+  {
+    name: 'Cobble embeddedness',
+    formula: 'E = (% buried) × (% surrounding fines) / 100',
+    where: [
+      ['% buried', 'fraction of the cobble below the streambed surface (visual estimate, 0–100)'],
+      ['% surrounding fines', 'fraction of substrate within ~1 cobble-diameter that is < 2 mm (visual estimate, 0–100)'],
+      ['E', 'embeddedness (0–100; lower is better habitat)'],
+    ],
+    example: {
+      title: 'Worked example',
+      given: 'A 90-mm cobble is roughly 60% buried, surrounded by ~40% fine sediment',
+      step: 'E = 60 × 40 / 100',
+      answer: 'E = 24%',
+    },
+    note: 'Reach-level mean E is what gets reported. E > 30% typically indicates poor spawning habitat — fish eggs need oxygen flow through gravel interstices.',
+  },
+  {
+    name: 'Particle size — D50 (median)',
+    formula: 'D50 = the b-axis size at which 50% of particles are smaller',
+    where: [
+      ['D50', 'median grain size (mm) — the half-way point of the size distribution'],
+    ],
+    example: {
+      title: 'Worked example',
+      given: '20 particles measured; sorted by size:<br><span class="mono">8, 16, 16, 32, 32, 32, 64, 64, 64, 64, 90, 90, 128, 128, 128, 180, 180, 180, 250, 250 mm</span>',
+      step: 'Position of median = (n+1)/2 = 10.5 → average of 10th and 11th values<br>D50 = (64 + 90) / 2',
+      answer: 'D50 = 77 mm (cobble class)',
+    },
+    note: 'D16 and D84 (16th and 84th percentiles) describe the spread. A narrow D16-to-D84 = well-sorted; wide = poorly sorted.',
+  },
+  {
+    name: 'Undercut bank — qualifying criteria',
+    formula: 'Qualifies = (L ≥ 1.0) ∧ (d̄ ≥ 0.20) ∧ (h ≤ 1.0) ∧ cover',
+    where: [
+      ['L', 'length along bank edge (m); must be ≥ 1.0'],
+      ['d̄', 'average undercut depth (m); must be ≥ 0.20 (= 20 cm)'],
+      ['h', 'height of ceiling above water surface (m); must be ≤ 1.0'],
+      ['cover', 'true if the undercut provides cover at sampling time (water covers the entrance)'],
+      ['∧', 'logical AND — <i>all four</i> must be true'],
+    ],
+    example: {
+      title: 'Worked example',
+      given: 'L = 1.4 m, d̄ = 35 cm = 0.35 m, h = 0.6 m, cover = yes',
+      step: 'Check each: L 1.4 ≥ 1.0 ✓ · d̄ 0.35 ≥ 0.20 ✓ · h 0.6 ≤ 1.0 ✓ · cover ✓',
+      answer: 'Qualifies → record this undercut',
+    },
+    note: 'Just one ✗ disqualifies the feature. Common failures: too short, ceiling too tall (= just an overhang, not really an undercut), or dewatered.',
+  },
+  {
+    name: 'Undercut bank — average depth',
+    formula: 'd̄ = (d₂₅ + d₅₀ + d₇₅) / 3',
+    where: [
+      ['d₂₅, d₅₀, d₇₅', 'undercut depth measured at 25%, 50%, and 75% of the bank length (m)'],
+      ['d̄', 'average undercut depth (m)'],
+    ],
+    example: {
+      title: 'Worked example',
+      given: 'L = 1.6 m. d at 25% (0.4 m along) = 0.32 m, d at 50% (0.8 m) = 0.38 m, d at 75% (1.2 m) = 0.35 m',
+      step: 'd̄ = (0.32 + 0.38 + 0.35) / 3 = 1.05 / 3',
+      answer: 'd̄ = 0.35 m → meets the ≥ 0.20 m criterion',
+    },
+  },
+];
+window.__openGlossary = (initialTab = 'terms') => {
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(40,30,10,0.7); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadein 0.2s;';
-  overlay.innerHTML = `
-    <div class="panel" style="max-width: 780px; width: 100%; max-height: 85vh; overflow-y: auto; padding: 32px;" onclick="event.stopPropagation()">
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px;">
-        <div>
-          <h2 class="display" style="margin: 0; font-size: 32px;">Glossary</h2>
-          <p style="margin: 4px 0 0; font-style: italic; color: var(--ink-soft); font-size: 14px;">Terms used throughout the simulator.</p>
-        </div>
-        <button class="btn" id="glossary-close" style="font-size: 11px;">✕ Close</button>
-      </div>
-      <dl style="margin: 0;">
-        ${GLOSSARY.map(g => `
+
+  let searchQuery = '';
+
+  const renderTermsContent = () => {
+    const q = searchQuery.trim().toLowerCase();
+    const filter = (g) => !q || g.term.toLowerCase().includes(q) || g.def.toLowerCase().includes(q);
+    const filtered = GLOSSARY.filter(filter);
+    if (filtered.length === 0) {
+      return `<div style="padding: 30px; text-align: center; color: var(--ink-faint); font-style: italic;">No terms match "${searchQuery}".</div>`;
+    }
+
+    if (q) {
+      // When searching, just list flat
+      return `<dl style="margin: 0;">
+        ${filtered.map(g => `
           <div style="margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px dotted var(--ink-faint);">
-            <dt class="display" style="font-size: 18px; color: var(--rust); margin-bottom: 4px;">${g.term}</dt>
-            <dd style="margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink-soft);">${g.def}</dd>
+            <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px;">
+              <dt class="display" style="font-size: 18px; color: var(--rust); margin: 0;">${highlight(g.term, q)}</dt>
+              <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-faint);">${g.cat}</span>
+            </div>
+            <dd style="margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink-soft);">${highlight(g.def, q)}</dd>
           </div>
         `).join('')}
-      </dl>
+      </dl>`;
+    }
+
+    // Grouped by category
+    return GLOSSARY_CATEGORIES.map(cat => {
+      const inCat = GLOSSARY.filter(g => g.cat === cat);
+      if (inCat.length === 0) return '';
+      return `
+        <section style="margin-bottom: 28px;">
+          <h3 style="margin: 0 0 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--rust); padding-bottom: 6px; border-bottom: 2px solid var(--ink);">${cat} <span style="color: var(--ink-faint); font-weight: normal;">· ${inCat.length}</span></h3>
+          <dl style="margin: 0;">
+            ${inCat.map(g => `
+              <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dotted var(--ink-faint);">
+                <dt class="display" style="font-size: 17px; color: var(--ink); margin: 0 0 3px;">${g.term}</dt>
+                <dd style="margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--ink-soft);">${g.def}</dd>
+              </div>
+            `).join('')}
+          </dl>
+        </section>
+      `;
+    }).join('');
+  };
+
+  const renderInner = (tab) => `
+    <div class="panel glossary-inner" style="max-width: 880px; width: 100%; max-height: 88vh; overflow-y: auto; padding: clamp(20px, 3vw, 36px);">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; gap: 16px; flex-wrap: wrap;">
+        <div>
+          <h2 class="display" style="margin: 0; font-size: clamp(26px, 4vw, 34px);">Reference</h2>
+          <p style="margin: 4px 0 0; font-style: italic; color: var(--ink-soft); font-size: 14px;">Glossary and equations for stream habitat assessment.</p>
+        </div>
+        <button class="btn glossary-close-btn" style="font-size: 11px;">✕ Close</button>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display: flex; gap: 0; border-bottom: 2px solid var(--ink); margin-bottom: 18px;">
+        ${[['terms', `Glossary · ${GLOSSARY.length}`], ['equations', `Equations · ${EQUATIONS.length}`]].map(([key, label]) => `
+          <button class="glossary-tab" data-tab="${key}"
+                  style="background: ${tab === key ? 'var(--ink)' : 'transparent'};
+                         color: ${tab === key ? 'var(--paper)' : 'var(--ink)'};
+                         border: 2px solid var(--ink); border-bottom: none;
+                         padding: 8px 18px; font-family: 'JetBrains Mono', monospace;
+                         font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+                         cursor: pointer; margin-right: -2px;
+                         ${tab === key ? 'transform: translateY(2px);' : ''}">
+            ${label}
+          </button>
+        `).join('')}
+      </div>
+
+      ${tab === 'terms' ? `
+        <div style="margin-bottom: 18px; position: relative;">
+          <input type="text" class="glossary-search" placeholder="Search terms…" value="${searchQuery.replace(/"/g, '&quot;')}"
+                 style="width: 100%; padding: 10px 14px 10px 36px; font-family: 'Newsreader', serif; font-size: 14px; border: 1.5px solid var(--ink); background: var(--paper); color: var(--ink);"/>
+          <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-faint); pointer-events: none;">⌕</span>
+        </div>
+        <div class="glossary-content">
+          ${renderTermsContent()}
+        </div>
+      ` : `
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+          ${EQUATIONS.map(e => renderEquation(e)).join('')}
+        </div>
+      `}
     </div>
   `;
-  // Click outside or on close button closes
-  overlay.addEventListener('click', () => overlay.remove());
+
+  overlay.innerHTML = renderInner(initialTab);
   document.body.appendChild(overlay);
+
+  let currentTab = initialTab;
+
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const wire = () => {
+    overlay.querySelector('.glossary-close-btn').addEventListener('click', close);
+    overlay.querySelectorAll('.glossary-tab').forEach(b => {
+      b.addEventListener('click', () => {
+        currentTab = b.dataset.tab;
+        searchQuery = '';
+        overlay.innerHTML = renderInner(currentTab);
+        wire();
+      });
+    });
+    // Wire search input - update results as you type without rebuilding the entire modal
+    const searchInput = overlay.querySelector('.glossary-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        searchQuery = e.target.value;
+        const contentEl = overlay.querySelector('.glossary-content');
+        if (contentEl) contentEl.innerHTML = renderTermsContent();
+      });
+      // Auto-focus search on open (desktop only — avoid keyboard popup on mobile)
+      if (window.matchMedia('(min-width: 901px)').matches) searchInput.focus();
+    }
+  };
+  wire();
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
 };
+
+// Highlight matched substring in search results
+function highlight(text, q) {
+  if (!q) return text;
+  const idx = text.toLowerCase().indexOf(q);
+  if (idx < 0) return text;
+  return text.slice(0, idx) +
+    '<mark style="background: rgba(192,138,42,0.35); color: var(--ink); padding: 1px 2px;">' +
+    text.slice(idx, idx + q.length) +
+    '</mark>' +
+    text.slice(idx + q.length);
+}
+
+function renderEquation(e) {
+  return `
+    <div style="border: 1.5px solid var(--ink); background: rgba(255, 250, 240, 0.5);">
+      <!-- Header -->
+      <div style="background: var(--ink); color: var(--paper); padding: 10px 16px;">
+        <h3 class="display" style="margin: 0; font-size: 19px; line-height: 1.2;">${e.name}</h3>
+      </div>
+      <div style="padding: 16px 18px;">
+        <!-- Formula -->
+        <div style="background: var(--paper-2); border-left: 4px solid var(--rust);
+                    padding: 14px 18px; margin-bottom: 14px;
+                    font-family: 'JetBrains Mono', monospace; font-size: 15px;
+                    line-height: 1.7; overflow-x: auto;">
+          ${e.formula}
+        </div>
+
+        <!-- Where -->
+        ${e.where ? `
+          <div style="margin-bottom: 14px;">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink-soft); margin-bottom: 8px;">Where</div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              ${e.where.map(([sym, desc]) => `
+                <tr style="border-bottom: 1px dotted var(--ink-faint);">
+                  <td style="padding: 5px 12px 5px 0; font-family: 'JetBrains Mono', monospace; color: var(--rust); white-space: nowrap; vertical-align: top; width: 1%;">${sym}</td>
+                  <td style="padding: 5px 0; color: var(--ink-soft); line-height: 1.5;">${desc}</td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+        ` : ''}
+
+        <!-- Lookup table (for width categories) -->
+        ${e.table ? `
+          <div style="margin-bottom: 14px; overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 12px;">
+              <thead>
+                <tr style="background: var(--paper-2); border-bottom: 2px solid var(--ink);">
+                  ${e.table.headers.map(h => `<th style="padding: 6px 10px; text-align: left;">${h}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                ${e.table.rows.map(r => `
+                  <tr style="border-bottom: 1px dotted var(--ink-faint);">
+                    ${r.map(c => `<td style="padding: 5px 10px;">${c}</td>`).join('')}
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : ''}
+
+        <!-- Worked example -->
+        ${e.example ? `
+          <div style="background: rgba(74,125,61,0.08); border-left: 4px solid var(--green-ok); padding: 12px 16px; margin-bottom: 12px;">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--green-ok); margin-bottom: 8px;">${e.example.title}</div>
+            <div style="font-size: 13px; line-height: 1.7; color: var(--ink);">
+              <div style="margin-bottom: 6px;"><b>Given:</b> ${e.example.given}</div>
+              <div style="margin-bottom: 6px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-soft);">${e.example.step}</div>
+              <div style="font-weight: 600; color: var(--rust);"><b style="color: var(--ink-soft); font-weight: normal; font-size: 12px;">→</b> ${e.example.answer}</div>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Note -->
+        ${e.note ? `
+          <div style="font-size: 12px; color: var(--ink-faint); font-style: italic; line-height: 1.55;">
+            ${e.note}
+          </div>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
 
 // =====================================================================
 // INITIAL RENDER
