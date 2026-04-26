@@ -1244,6 +1244,21 @@ function layoutSidebar() {
   const measurements = state.bankfullMeasurements;
   const avg = measurements.length === 5 ? measurements.reduce((a,b)=>a+b.value,0)/5 : null;
 
+  // Width category lookup table — matches Table 2 in the protocol
+  const CAT_ROWS = [
+    { range: '≤ 6',         min: 0,   max: 6,   cat: 6 },
+    { range: '> 6 and ≤ 8',  min: 6,   max: 8,   cat: 8 },
+    { range: '> 8 and ≤ 10', min: 8,   max: 10,  cat: 10 },
+    { range: '> 10 and ≤ 12', min: 10, max: 12,  cat: 12 },
+    { range: '> 12 and ≤ 14', min: 12, max: 14,  cat: 14 },
+    { range: '> 14 and ≤ 16', min: 14, max: 16,  cat: 16 },
+    { range: '> 16 and ≤ 18', min: 16, max: 18,  cat: 18 },
+    { range: '> 18',         min: 18, max: Infinity, cat: 20 },
+  ];
+
+  // Determine which row matches the current avg (if any)
+  const matchedRow = avg == null ? -1 : CAT_ROWS.findIndex(r => avg > r.min && avg <= r.max);
+
   s.innerHTML = `
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 28px;">
       <div>
@@ -1273,6 +1288,42 @@ function layoutSidebar() {
             <td style="padding: 6px 0; text-align: right; color: var(--rust); font-weight: 600;">${state.widthCategory ? state.widthCategory + ' m' : '—'}</td>
           </tr>
         </table>
+      </div>
+      <div>
+        <h5 style="margin: 0 0 8px; font-size: 12px; font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 0.1em;">
+          Width category lookup
+          <span style="display: block; font-family: 'Newsreader', serif; text-transform: none; letter-spacing: normal; font-size: 11px; color: var(--ink-faint); font-weight: 400; font-style: italic; margin-top: 2px;">Protocol Table 2</span>
+        </h5>
+        <table style="width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono'; font-size: 11px;">
+          <thead>
+            <tr style="border-bottom: 1.5px solid var(--ink); background: var(--paper-2);">
+              <th style="text-align: left; padding: 5px 6px; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;">Avg BFW</th>
+              <th style="text-align: right; padding: 5px 6px; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;">Cat. (m)</th>
+              <th style="text-align: right; padding: 5px 0; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;">Site (m)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${CAT_ROWS.map((r, i) => {
+              const isMatch = i === matchedRow;
+              return `<tr style="border-bottom: 1px dotted var(--ink-faint);
+                                 ${isMatch ? 'background: rgba(180, 71, 31, 0.14); font-weight: 700;' : ''}
+                                 ${isMatch ? 'color: var(--rust);' : ''}">
+                <td style="padding: 4px 6px;">${isMatch ? '▸ ' : '&nbsp;&nbsp;'}${r.range}</td>
+                <td style="padding: 4px 6px; text-align: right;">${r.cat}</td>
+                <td style="padding: 4px 0; text-align: right;">${r.cat * 10}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        ${matchedRow >= 0 ? `
+          <div style="font-size: 11px; color: var(--rust); margin-top: 8px; font-style: italic; line-height: 1.5;">
+            Your avg ${avg.toFixed(2)} m → category <b>${CAT_ROWS[matchedRow].cat} m</b>, reach length <b>${CAT_ROWS[matchedRow].cat * 10} m</b>.
+          </div>
+        ` : `
+          <div style="font-size: 11px; color: var(--ink-faint); margin-top: 8px; font-style: italic; line-height: 1.5;">
+            The matching row will highlight once you've taken all 5 width measurements.
+          </div>
+        `}
       </div>
       <div>
         <h5 style="margin: 0 0 8px; font-size: 12px; font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 0.1em;">Transects</h5>
@@ -3156,25 +3207,21 @@ function recordTermsAgreement() {
 }
 
 window.__beginFieldwork = () => {
-  if (!hasAgreedTerms()) {
-    window.__openTerms({ requireAgreement: true });
-    return;
-  }
   goStage('layout');
 };
 
-window.__openTerms = ({ requireAgreement = false } = {}) => {
+window.__openTerms = () => {
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(40,30,10,0.78); z-index: 220; display: flex; align-items: center; justify-content: center; padding: 16px; animation: fadein 0.2s;';
 
-  const renderInner = () => `
+  overlay.innerHTML = `
     <div class="panel" style="max-width: 720px; width: 100%; max-height: 90vh; overflow-y: auto; padding: clamp(20px, 3vw, 36px);">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; flex-wrap: wrap;">
         <div>
           <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--rust);">${TERMS.effective} · v ${TERMS_VERSION}</div>
           <h2 class="display" style="margin: 4px 0 0; font-size: clamp(26px, 4vw, 34px);">${TERMS.title}</h2>
         </div>
-        ${!requireAgreement ? `<button class="btn terms-close-btn" type="button" style="font-size: 11px;">✕ Close</button>` : ''}
+        <button class="btn terms-close-btn" type="button" style="font-size: 11px;">✕ Close</button>
       </div>
       <p style="margin: 0 0 18px; font-size: 14px; line-height: 1.55; color: var(--ink-soft);">${TERMS.intro}</p>
       ${TERMS.sections.map(s => `
@@ -3183,54 +3230,21 @@ window.__openTerms = ({ requireAgreement = false } = {}) => {
           <p style="margin: 0; font-size: 13px; line-height: 1.6; color: var(--ink-soft);">${s.p}</p>
         </div>
       `).join('')}
-      <div style="margin-top: 22px; padding: 14px 16px; background: rgba(192,138,42,0.08); border-left: 3px solid var(--gold); font-size: 13px; line-height: 1.55; color: var(--ink-soft); font-style: italic;">
-        ${TERMS.agreeNote}
+      <div style="margin-top: 18px; display: flex; gap: 10px; justify-content: flex-end;">
+        <button class="btn terms-close-btn-2" type="button" style="font-size: 11px;">Close</button>
       </div>
-      ${requireAgreement ? `
-        <div style="margin-top: 22px; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;">
-          <button class="btn terms-decline-btn" type="button">Decline & exit</button>
-          <button class="btn btn-primary terms-agree-btn" type="button">I agree — Begin →</button>
-        </div>
-      ` : `
-        <div style="margin-top: 18px; display: flex; gap: 10px; justify-content: flex-end;">
-          <button class="btn terms-close-btn-2" type="button" style="font-size: 11px;">Close</button>
-        </div>
-      `}
     </div>
   `;
-
-  overlay.innerHTML = renderInner();
   document.body.appendChild(overlay);
 
   const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = (e) => {
-    if (e.key === 'Escape' && !requireAgreement) close();
-  };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
 
-  // Close buttons (only present when not gating)
   overlay.querySelectorAll('.terms-close-btn, .terms-close-btn-2').forEach(b => {
     b.addEventListener('click', close);
   });
-  // Agreement gate buttons
-  const agreeBtn = overlay.querySelector('.terms-agree-btn');
-  const declineBtn = overlay.querySelector('.terms-decline-btn');
-  if (agreeBtn) agreeBtn.addEventListener('click', () => {
-    recordTermsAgreement();
-    sfx.success();
-    close();
-    goStage('layout');
-  });
-  if (declineBtn) declineBtn.addEventListener('click', () => {
-    sfx.tick();
-    close();
-    toast('You can review these terms any time from the footer.', 'info', 3500);
-  });
-
-  // Click backdrop to close (only if not gating)
-  if (!requireAgreement) {
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
-  }
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 };
 
 function goStage(name) {
