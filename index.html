@@ -735,8 +735,9 @@ function renderHeader() {
         <div>${formatToday()}</div>
         <div style="font-size: 14px; color: var(--ink-faint);">crew: you, solo</div>
         <div style="margin-top: 10px; display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap;">
-          <button onclick="window.__toggleMute()" id="mute-btn" class="btn btn-ghost" style="font-size: 10px; padding: 4px 10px; transform: rotate(-1deg);">${audioState.muted ? '🔇 Sound off' : '🔊 Sound on'}</button>
-          <button onclick="window.__openGlossary()" class="btn btn-ghost" style="font-size: 10px; padding: 4px 10px; transform: rotate(-2deg);">📖 Reference</button>
+          <button onclick="window.__restartWithConfirm()" type="button" class="btn btn-ghost" style="font-size: 10px; padding: 4px 10px; transform: rotate(1deg);">↺ Restart</button>
+          <button onclick="window.__toggleMute()" id="mute-btn" type="button" class="btn btn-ghost" style="font-size: 10px; padding: 4px 10px; transform: rotate(-1deg);">${audioState.muted ? '🔇 Sound off' : '🔊 Sound on'}</button>
+          <button onclick="window.__openGlossary()" type="button" class="btn btn-ghost" style="font-size: 10px; padding: 4px 10px; transform: rotate(-2deg);">📖 Reference</button>
         </div>
       </div>
     </div>
@@ -3120,34 +3121,94 @@ function stageSummary() {
     </div>
   `;
 
-  setTimeout(() => {
-    window.__restart = () => {
-      // Hard reset
-      Object.assign(state, {
-        stage: 'intro',
-        bankfullMeasurements: [],
-        widthCategory: null,
-        transectsPlaced: 0,
-        transectsLocked: false,
-        csTransect: 1,
-        csMeasurements: [],
-        csComplete: false,
-        unitBoundaries: [0, 1.0],
-        unitClassifications: [],
-        unitsComplete: false,
-        substrateCrossSections: [],
-        substratePicks: [],
-        substrateComplete: false,
-        undercutDecisions: [],
-        undercutComplete: false,
-        score: { layout: 0, crosssection: 0, units: 0, substrate: 0, undercut: 0 },
-        scoreNotes: { layout: [], crosssection: [], units: [], substrate: [], undercut: [] },
-      });
-      render();
-    };
-  }, 0);
   return el;
 }
+
+// =====================================================================
+// RESTART (available from anywhere)
+// =====================================================================
+function resetSimState() {
+  Object.assign(state, {
+    stage: 'intro',
+    bankfullMeasurements: [],
+    widthCategory: null,
+    transectsPlaced: 0,
+    transectsLocked: false,
+    csTransect: 1,
+    csMeasurements: [],
+    csComplete: false,
+    unitBoundaries: [0, 1.0],
+    unitClassifications: [],
+    unitsComplete: false,
+    substrateCrossSections: [],
+    substratePicks: [],
+    substrateComplete: false,
+    undercutDecisions: [],
+    undercutComplete: false,
+    score: { layout: 0, crosssection: 0, units: 0, substrate: 0, undercut: 0 },
+    scoreNotes: { layout: [], crosssection: [], units: [], substrate: [], undercut: [] },
+    unitsWrong: null,
+    _substrateFinalSoundPlayed: false,
+    _samplingStarted: false,
+  });
+  // Forget coach marks so they fire again on the next run-through
+  seenCoachMarks.clear();
+  dismissCoach();
+}
+
+window.__restart = () => {
+  resetSimState();
+  render();
+};
+
+// Confirmation-prompted restart for the header button
+window.__restartWithConfirm = () => {
+  // Detect whether there's any progress worth confirming. If user is on intro
+  // and hasn't done anything, just no-op (or play a tick).
+  const hasProgress =
+    state.bankfullMeasurements.length > 0 ||
+    state.transectsPlaced > 0 ||
+    state.csMeasurements.length > 0 ||
+    state.unitBoundaries.length > 2 ||
+    state.substrateCrossSections.length > 0 ||
+    state.undercutDecisions.length > 0 ||
+    state.stage !== 'intro';
+
+  if (!hasProgress) {
+    sfx.tick();
+    toast('Already at the start — nothing to reset.', 'info', 2500);
+    return;
+  }
+
+  // Show a small confirm modal
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(40,30,10,0.7); z-index: 220; display: flex; align-items: center; justify-content: center; padding: 16px; animation: fadein 0.2s;';
+  overlay.innerHTML = `
+    <div class="panel" style="max-width: 440px; width: 100%; padding: 28px;">
+      <h3 class="display" style="margin: 0 0 10px; font-size: 24px;">Restart the simulation?</h3>
+      <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.55; color: var(--ink-soft);">
+        This will clear all measurements, transects, classifications, and decisions across every stage. You'll go back to the intro screen with a fresh site.
+      </p>
+      <div style="display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;">
+        <button class="btn restart-cancel" type="button">Cancel</button>
+        <button class="btn btn-primary restart-confirm" type="button">↺ Yes, restart</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  overlay.querySelector('.restart-cancel').addEventListener('click', () => { sfx.tick(); close(); });
+  overlay.querySelector('.restart-confirm').addEventListener('click', () => {
+    sfx.toggle();
+    close();
+    resetSimState();
+    render();
+    toast('Simulation restarted. Fresh site, fresh crew.', 'ok', 3000);
+  });
+};
 
 // =====================================================================
 // NAVIGATION
