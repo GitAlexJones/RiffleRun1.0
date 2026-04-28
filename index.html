@@ -181,6 +181,99 @@
   }
   .ripple { animation: ripple 0.7s ease-out forwards; }
 
+  /* Title water animation: streaks drift left → right (downstream) */
+  @keyframes title-water-drift {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(40px); }
+  }
+  @keyframes title-foam-bob {
+    0%, 100% { transform: translateY(0); opacity: 0.9; }
+    50% { transform: translateY(-1.5px); opacity: 1; }
+  }
+  @keyframes title-spray {
+    0%   { opacity: 0; transform: translate(0, 0) scale(0.6); }
+    30%  { opacity: 0.8; }
+    100% { opacity: 0; transform: translate(0, -8px) scale(1.2); }
+  }
+  .title-flow-layer { animation: title-water-drift 2.4s linear infinite; }
+  .title-foam { animation: title-foam-bob 1.8s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+  .title-spray-1 { animation: title-spray 2.1s ease-out infinite; }
+  .title-spray-2 { animation: title-spray 2.4s ease-out 0.6s infinite; }
+  .title-spray-3 { animation: title-spray 1.9s ease-out 1.1s infinite; }
+
+  /* Rocky title text — letters look like wet boulders */
+  .title-rocky { position: relative; }
+  .rocky-text {
+    /* Stone-like gradient fill clipped to text shape */
+    background:
+      /* Top wet sheen — bright cap on each letter */
+      linear-gradient(180deg,
+        rgba(253,250,240,0.55) 0%,
+        rgba(253,250,240,0.18) 22%,
+        transparent 38%),
+      /* Subtle speckle texture using radial gradients */
+      radial-gradient(circle at 22% 35%, rgba(253,250,240,0.18) 0px, transparent 2px),
+      radial-gradient(circle at 70% 60%, rgba(0,0,0,0.35) 0px, transparent 2px),
+      radial-gradient(circle at 45% 80%, rgba(253,250,240,0.10) 0px, transparent 2px),
+      /* Main stone color — warm browns deepening to dark */
+      linear-gradient(160deg, #9b876a 0%, #6b5a44 35%, #3a3225 70%, #2a2418 100%);
+    background-size: 100% 100%, 14px 14px, 18px 18px, 11px 11px, 100% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    /* Stone bevel via stacked text-shadows */
+    text-shadow:
+      0 1px 0 rgba(0,0,0,0.55),       /* base shadow under letters */
+      0 2px 1px rgba(0,0,0,0.30),     /* deeper drop */
+      -1px -1px 0 rgba(253,250,240,0.18),  /* highlight upper-left edge */
+      1px 1px 2px rgba(74,104,120,0.45);   /* wet halo on lower-right */
+    /* Subtle paint stroke to firm the silhouette */
+    -webkit-text-stroke: 0.5px rgba(20,15,10,0.45);
+  }
+  /* "Run" gets a warmer, more rust-iron coloration */
+  .rocky-text-rust {
+    background:
+      linear-gradient(180deg,
+        rgba(253,250,240,0.55) 0%,
+        rgba(253,250,240,0.18) 22%,
+        transparent 38%),
+      radial-gradient(circle at 22% 35%, rgba(253,250,240,0.18) 0px, transparent 2px),
+      radial-gradient(circle at 70% 60%, rgba(0,0,0,0.40) 0px, transparent 2px),
+      radial-gradient(circle at 45% 80%, rgba(253,250,240,0.10) 0px, transparent 2px),
+      linear-gradient(160deg, #c46943 0%, #934a25 40%, #4a2818 80%, #2a1a10 100%);
+    background-size: 100% 100%, 14px 14px, 18px 18px, 11px 11px, 100% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow:
+      0 1px 0 rgba(0,0,0,0.55),
+      0 2px 1px rgba(0,0,0,0.30),
+      -1px -1px 0 rgba(253,250,240,0.18),
+      1px 1px 2px rgba(74,104,120,0.45);
+    -webkit-text-stroke: 0.5px rgba(20,15,10,0.45);
+  }
+
+  /* Tiny water animations layered on top of the title */
+  @keyframes rocky-flow {
+    0%   { transform: translateX(-12px); opacity: 0; }
+    20%  { opacity: 0.8; }
+    100% { transform: translateX(60px); opacity: 0; }
+  }
+  @keyframes rocky-drip {
+    0%   { transform: translateY(0); opacity: 0.85; }
+    100% { transform: translateY(14px); opacity: 0; }
+  }
+  .rocky-flow-1 { animation: rocky-flow 2.6s ease-out infinite; }
+  .rocky-flow-2 { animation: rocky-flow 3.1s ease-out 0.7s infinite; }
+  .rocky-flow-3 { animation: rocky-flow 2.4s ease-out 1.4s infinite; }
+  .rocky-drip-1 { animation: rocky-drip 2.0s ease-in 0.4s infinite; }
+  .rocky-drip-2 { animation: rocky-drip 2.4s ease-in 1.2s infinite; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .title-flow-layer, .title-foam, .title-spray-1, .title-spray-2, .title-spray-3,
+    .rocky-flow-1, .rocky-flow-2, .rocky-flow-3, .rocky-drip-1, .rocky-drip-2 { animation: none; }
+  }
+
   /* Scrollbar */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: var(--paper-2); }
@@ -443,6 +536,38 @@ const sfx = {
   toggle() {
     tone({ freq: 700, duration: 0.04, type: 'triangle', volume: 0.07 });
   },
+  // Measuring tape unspooling — high-frequency filtered noise that fades
+  tapePull() {
+    if (audioState.muted) return;
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const duration = 0.85; // matches animation duration
+    // Use long noise burst with bandpass that sweeps up — like a reel spinning
+    const len = Math.max(1, Math.floor(ctx.sampleRate * duration));
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filt = ctx.createBiquadFilter();
+    filt.type = 'bandpass';
+    filt.frequency.setValueAtTime(2400, now);
+    filt.frequency.linearRampToValueAtTime(1800, now + duration);
+    filt.Q.value = 4;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.045, now + 0.04);
+    gain.gain.linearRampToValueAtTime(0.035, now + duration - 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    src.connect(filt).connect(gain).connect(ctx.destination);
+    src.start(now);
+  },
+  // Tape stops at the bank — sharp click + low thump
+  tapeStop() {
+    tone({ freq: 220, freqEnd: 140, duration: 0.07, type: 'triangle', volume: 0.14, attack: 0.001 });
+    noise({ duration: 0.04, volume: 0.06, filterFreq: 1200 });
+  },
 };
 window.__sfx = sfx;
 
@@ -595,6 +720,7 @@ window.addEventListener('resize', () => dismissCoach());
 // ---------- APP STATE ----------
 const state = {
   stage: 'intro',  // intro | layout | crosssection | units | substrate | undercut | summary
+  crewName: (() => { try { return localStorage.getItem('riffleRunCrewName') || ''; } catch (e) { return ''; } })(),
   // Layout stage
   bankfullMeasurements: [],   // 5 measurements
   widthCategory: null,        // e.g. 6, 8, 10, 12...
@@ -704,6 +830,187 @@ function renderFooter() {
   return f;
 }
 
+// =====================================================================
+// "Riffle Run" title — the letters are boulders with water flowing over them.
+// Layers, top to bottom: deep water gradient (background), letter "boulders"
+// (with stone texture, chips, fissures), water flowing OVER tops of letters
+// (foam streaks, drips), foreground spray particles for life.
+// =====================================================================
+function riffleRunTitleSVG() {
+  // SVG viewBox: 720 wide × 220 tall, scales fluidly with width
+  const W = 720, H = 220;
+
+  return `
+  <div style="position: relative; width: 100%;">
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMinYMid meet"
+         style="width: 100%; height: auto; max-height: 220px; display: block; overflow: visible;"
+         aria-label="Riffle Run">
+      <defs>
+        <!-- Stone fill: warm rocky base with darker pockets -->
+        <radialGradient id="rock-grad" cx="0.4" cy="0.3" r="0.9">
+          <stop offset="0%"  stop-color="#9b876a"/>
+          <stop offset="50%" stop-color="#5a4f38"/>
+          <stop offset="100%" stop-color="#2a2418"/>
+        </radialGradient>
+
+        <!-- Stone texture: speckles of dark and light to suggest mineral grain -->
+        <pattern id="stone-tex" width="14" height="14" patternUnits="userSpaceOnUse">
+          <circle cx="2"  cy="3"  r="1.1" fill="#2a2418" opacity="0.55"/>
+          <circle cx="9"  cy="6"  r="0.7" fill="#fdfaf0" opacity="0.18"/>
+          <circle cx="11" cy="11" r="0.9" fill="#2a2418" opacity="0.45"/>
+          <circle cx="4"  cy="10" r="0.5" fill="#fdfaf0" opacity="0.14"/>
+          <circle cx="7"  cy="2"  r="0.6" fill="#2a2418" opacity="0.4"/>
+          <path d="M 1 7 L 4 8" stroke="#1a1612" stroke-width="0.4" opacity="0.5"/>
+          <path d="M 8 12 L 12 10" stroke="#1a1612" stroke-width="0.4" opacity="0.5"/>
+        </pattern>
+
+        <!-- Bevel filter: gives letters that chiseled-stone depth -->
+        <filter id="rock-bevel" x="-5%" y="-5%" width="110%" height="115%">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur"/>
+          <feSpecularLighting in="blur" surfaceScale="3" specularConstant="0.7"
+                              specularExponent="20" lighting-color="#fdfaf0" result="spec">
+            <feDistantLight azimuth="135" elevation="55"/>
+          </feSpecularLighting>
+          <feComposite in="spec" in2="SourceAlpha" operator="in" result="specOnLetter"/>
+          <feComposite in="SourceGraphic" in2="specOnLetter" operator="arithmetic"
+                       k1="0" k2="1" k3="0.6" k4="0"/>
+        </filter>
+
+        <!-- Outline glow: cool wet halo around each rock where water laps -->
+        <filter id="wet-halo" x="-10%" y="-10%" width="120%" height="120%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="halo"/>
+          <feColorMatrix in="halo" type="matrix"
+            values="0 0 0 0 0.42  0 0 0 0 0.55  0 0 0 0 0.62  0 0 0 0.7 0"/>
+        </filter>
+
+        <!-- Background water gradient -->
+        <linearGradient id="title-water-bg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"  stop-color="#a8c0d0"/>
+          <stop offset="55%" stop-color="#5a7e90"/>
+          <stop offset="100%" stop-color="#1a2c38"/>
+        </linearGradient>
+
+        <!-- Define the letter shapes ONCE, reuse for stone and water masks -->
+        <text id="title-text-defs" x="${W/2}" y="${H * 0.62}"
+              text-anchor="middle"
+              font-family="'Cormorant Garamond', 'Playfair Display', Georgia, serif"
+              font-size="${H * 0.85}" font-weight="700"
+              letter-spacing="-0.01em">RIFFLE RUN</text>
+
+        <!-- Mask: letters used as a clip so we can overlay water inside them -->
+        <clipPath id="letter-clip">
+          <use href="#title-text-defs"/>
+        </clipPath>
+      </defs>
+
+      <!-- 1. Background: water flowing across the whole title area -->
+      <rect x="0" y="${H*0.18}" width="${W}" height="${H*0.78}"
+            fill="url(#title-water-bg)" opacity="0.25"/>
+
+      <!-- 2. Animated water surface streaks (drift downstream) -->
+      <g class="title-flow-layer" opacity="0.6">
+        ${(() => {
+          let s = '';
+          for (let i = 0; i < 28; i++) {
+            const y = H * 0.20 + (i * 7.4) % (H * 0.7);
+            const x = -50 + (i * 31) % (W + 100);
+            const len = 18 + (i * 13) % 40;
+            const op = 0.20 + ((i * 7) % 50) / 100;
+            s += `<path d="M ${x} ${y} q ${len/2} ${-1.5} ${len} 0"
+                        stroke="#fdfaf0" stroke-width="${0.5 + (i % 3) * 0.3}"
+                        fill="none" opacity="${op}"/>`;
+          }
+          return s;
+        })()}
+      </g>
+
+      <!-- 3. The rocky letters themselves -->
+      <!-- Wet outline halo behind letters -->
+      <g filter="url(#wet-halo)" opacity="0.55">
+        <use href="#title-text-defs"/>
+      </g>
+      <!-- Stone fill -->
+      <g filter="url(#rock-bevel)">
+        <use href="#title-text-defs" fill="url(#rock-grad)"/>
+      </g>
+      <!-- Texture overlay (clipped to letters) -->
+      <g clip-path="url(#letter-clip)">
+        <rect x="0" y="0" width="${W}" height="${H}" fill="url(#stone-tex)" opacity="0.55"/>
+        <!-- A few darker fissures across some letters -->
+        <path d="M ${W*0.18} ${H*0.32} q 8 14 6 32" stroke="#1a1612" stroke-width="1.2" fill="none" opacity="0.5"/>
+        <path d="M ${W*0.42} ${H*0.45} l 14 10" stroke="#1a1612" stroke-width="1" fill="none" opacity="0.55"/>
+        <path d="M ${W*0.66} ${H*0.30} q -6 16 -4 30" stroke="#1a1612" stroke-width="1.2" fill="none" opacity="0.5"/>
+        <path d="M ${W*0.82} ${H*0.50} l 10 -6" stroke="#1a1612" stroke-width="0.9" fill="none" opacity="0.5"/>
+        <!-- Highlights on tops/upper-left — sun-catching wet stone -->
+        <path d="M 0 ${H*0.32} q ${W*0.5} ${-12} ${W} ${0}"
+              stroke="#fdfaf0" stroke-width="3" fill="none" opacity="0.22"/>
+      </g>
+
+      <!-- 4. Bright wet sheen at the tops of letters (water flowing over them) -->
+      <g clip-path="url(#letter-clip)" opacity="0.95">
+        <rect x="0" y="${H*0.20}" width="${W}" height="${H*0.10}" fill="#fdfaf0" opacity="0.55"/>
+        <rect x="0" y="${H*0.30}" width="${W}" height="${H*0.05}" fill="#fdfaf0" opacity="0.25"/>
+      </g>
+
+      <!-- 5. Foam patches at the upstream face of each "boulder" -->
+      <g class="title-flow-layer" opacity="0.85">
+        ${(() => {
+          const positions = [
+            [W*0.105, H*0.40], [W*0.180, H*0.50], [W*0.235, H*0.42],
+            [W*0.310, H*0.48], [W*0.395, H*0.45], [W*0.475, H*0.50],
+            [W*0.585, H*0.42], [W*0.665, H*0.48], [W*0.755, H*0.45],
+          ];
+          return positions.map(([x, y], i) => `
+            <g class="title-foam">
+              <ellipse cx="${x}" cy="${y}" rx="${5 + (i%3)}" ry="${1.5 + (i%2)*0.5}" fill="#fdfaf0" opacity="0.85"/>
+              <ellipse cx="${x - 5}" cy="${y + 2}" rx="${3 + (i%2)}" ry="${1.0}" fill="#fdfaf0" opacity="0.7"/>
+            </g>
+          `).join('');
+        })()}
+      </g>
+
+      <!-- 6. Drips falling off the bottom of letters -->
+      <g opacity="0.7">
+        <ellipse class="title-spray-1" cx="${W*0.20}" cy="${H*0.80}" rx="1.2" ry="2.2" fill="#7ea0b3"/>
+        <ellipse class="title-spray-2" cx="${W*0.42}" cy="${H*0.82}" rx="1.0" ry="2"   fill="#7ea0b3"/>
+        <ellipse class="title-spray-3" cx="${W*0.65}" cy="${H*0.78}" rx="1.3" ry="2.3" fill="#7ea0b3"/>
+        <ellipse class="title-spray-1" cx="${W*0.78}" cy="${H*0.84}" rx="1.0" ry="2"   fill="#7ea0b3"/>
+        <ellipse class="title-spray-2" cx="${W*0.55}" cy="${H*0.80}" rx="1.2" ry="2.2" fill="#7ea0b3"/>
+      </g>
+
+      <!-- 7. White-water spray bursts -->
+      <g opacity="0.85">
+        <g class="title-spray-1">
+          <circle cx="${W*0.25}" cy="${H*0.36}" r="2.2" fill="#fdfaf0"/>
+          <circle cx="${W*0.27}" cy="${H*0.34}" r="1.3" fill="#fdfaf0"/>
+          <circle cx="${W*0.23}" cy="${H*0.38}" r="1.6" fill="#fdfaf0"/>
+        </g>
+        <g class="title-spray-2">
+          <circle cx="${W*0.50}" cy="${H*0.34}" r="1.8" fill="#fdfaf0"/>
+          <circle cx="${W*0.52}" cy="${H*0.32}" r="1.2" fill="#fdfaf0"/>
+        </g>
+        <g class="title-spray-3">
+          <circle cx="${W*0.74}" cy="${H*0.36}" r="2.1" fill="#fdfaf0"/>
+          <circle cx="${W*0.76}" cy="${H*0.34}" r="1.3" fill="#fdfaf0"/>
+        </g>
+      </g>
+
+      <!-- 8. Version tag — a metal survey marker hung off the top-right -->
+      <g transform="translate(${W - 70}, ${H * 0.18})">
+        <rect x="-2" y="-2" width="56" height="22" fill="#b4471f" stroke="#2a2418" stroke-width="1.5"/>
+        <rect x="-2" y="-2" width="56" height="22" fill="url(#stone-tex)" opacity="0.25"/>
+        <text x="26" y="13" text-anchor="middle"
+              font-family="'JetBrains Mono', monospace"
+              font-size="11" font-weight="700"
+              fill="#fdfaf0" letter-spacing="0.15em">v 1.0</text>
+        <circle cx="3" cy="2" r="1" fill="#2a2418"/>
+        <circle cx="49" cy="2" r="1" fill="#2a2418"/>
+      </g>
+    </svg>
+  </div>
+  `;
+}
+
 // ---------- HEADER ----------
 function renderHeader() {
   const h = document.createElement('header');
@@ -721,23 +1028,43 @@ function renderHeader() {
 
   h.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap;">
-      <div>
-        <h1 class="display" style="font-size: clamp(40px, 7vw, 88px); margin: 0; line-height: 0.9; font-weight: 600;">
-          Riffle
-          <span style="display: inline-block; transform: rotate(-2deg); color: var(--rust);">Run</span>
-          <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.28em; font-weight: 400; color: var(--ink-faint); letter-spacing: 0.05em; vertical-align: 0.9em; margin-left: -0.15em;">1.0</span>
-        </h1>
+      <div style="flex: 1; min-width: 280px;">
+        <div style="position: relative; display: inline-block;">
+          <h1 class="display title-rocky" style="font-size: clamp(40px, 7vw, 88px); margin: 0; line-height: 0.9; font-weight: 700; letter-spacing: -0.01em;">
+            <span class="rocky-text">Riffle</span>
+            <span class="rocky-text rocky-text-rust">Run</span>
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.28em; font-weight: 400; color: var(--ink-faint); letter-spacing: 0.05em; vertical-align: 0.9em; margin-left: -0.15em;">1.0</span>
+          </h1>
+          <!-- Water FX: small flow streaks above the letters and drips below -->
+          <svg style="position: absolute; left: 0; right: 0; top: 0; bottom: -10px; width: 100%; height: calc(100% + 14px); pointer-events: none; overflow: visible;" preserveAspectRatio="none">
+            <!-- Flow streaks washing across the top of the letters -->
+            <g>
+              <path class="rocky-flow-1" d="M 0 6 q 8 -2 16 0" stroke="#fdfaf0" stroke-width="1.2" fill="none" opacity="0.9"/>
+              <path class="rocky-flow-2" d="M 0 14 q 10 -2 20 0" stroke="#fdfaf0" stroke-width="0.9" fill="none" opacity="0.7"/>
+              <path class="rocky-flow-3" d="M 0 22 q 6 -1.5 12 0" stroke="#fdfaf0" stroke-width="1" fill="none" opacity="0.85"/>
+            </g>
+            <!-- Foam dabs at upstream face of a couple letters -->
+            <ellipse cx="6%"  cy="46%" rx="6" ry="1.6" fill="#fdfaf0" opacity="0.75"/>
+            <ellipse cx="32%" cy="50%" rx="5" ry="1.4" fill="#fdfaf0" opacity="0.7"/>
+            <ellipse cx="58%" cy="46%" rx="6" ry="1.6" fill="#fdfaf0" opacity="0.75"/>
+            <!-- Drips off the bottom of letters -->
+            <ellipse class="rocky-drip-1" cx="14%" cy="92%" rx="1.4" ry="2.6" fill="#7ea0b3" opacity="0.85"/>
+            <ellipse class="rocky-drip-2" cx="42%" cy="92%" rx="1.2" ry="2.4" fill="#7ea0b3" opacity="0.85"/>
+            <ellipse class="rocky-drip-1" cx="68%" cy="92%" rx="1.4" ry="2.6" fill="#7ea0b3" opacity="0.85"/>
+          </svg>
+        </div>
         <p style="font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 18px; color: var(--ink-soft); margin: 10px 0 0; max-width: 640px;">
           A field-skills trainer for stream habitat assessment — site layout, cross sections, channel units, substrate, and undercut banks.
         </p>
       </div>
-      <div class="hand" style="font-size: 22px; color: var(--rust); transform: rotate(2deg); text-align: right;">
+      <div class="hand" style="font-size: 22px; color: var(--rust); text-align: right;">
         <div>${formatToday()}</div>
-        <div style="font-size: 14px; color: var(--ink-faint);">crew: you, solo</div>
+        <div style="font-size: 14px; color: var(--ink-faint);">crew: ${state.crewName || 'you, solo'}${state.crewName ? '' : ''}</div>
         <div style="margin-top: 10px; display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap;">
-          <button onclick="window.__restartWithConfirm()" type="button" class="btn btn-ghost" style="font-size: 10px; padding: 4px 10px; transform: rotate(1deg);">↺ Restart</button>
-          <button onclick="window.__toggleMute()" id="mute-btn" type="button" class="btn btn-ghost" style="font-size: 10px; padding: 4px 10px; transform: rotate(-1deg);">${audioState.muted ? '🔇 Sound off' : '🔊 Sound on'}</button>
-          <button onclick="window.__openGlossary()" type="button" class="btn btn-ghost" style="font-size: 10px; padding: 4px 10px; transform: rotate(-2deg);">📖 Reference</button>
+          <button onclick="window.__editCrewName()" type="button" class="btn btn-ghost" style="font-size: 10px; padding: 4px 10px;">${state.crewName ? '✎ ' + (state.crewName.length > 14 ? state.crewName.slice(0, 14) + '…' : state.crewName) : '✎ Add your name'}</button>
+          <button onclick="window.__restartWithConfirm()" type="button" class="btn btn-ghost" style="font-size: 10px; padding: 4px 10px;">↺ Restart</button>
+          <button onclick="window.__toggleMute()" id="mute-btn" type="button" class="btn btn-ghost" style="font-size: 10px; padding: 4px 10px;">${audioState.muted ? '🔇 Sound off' : '🔊 Sound on'}</button>
+          <button onclick="window.__openGlossary()" type="button" class="btn btn-ghost" style="font-size: 10px; padding: 4px 10px;">📖 Reference</button>
         </div>
       </div>
     </div>
@@ -969,15 +1296,15 @@ function layoutCanvas() {
   c.className = 'panel';
   c.style.cssText = 'padding: 18px;';
 
-  const W = 1400, H = 600;
+  const W = 1400, H = 740;
   const sToX = s => 60 + s * (W - 120) / STREAM.len;
-  const latToY = lat => H/2 + lat * 12;
+  const latToY = lat => H/2 + lat * 16;
 
   // Smooth bank polygons
   const leftBank = [], rightBank = [], wetLeft = [], wetRight = [];
   for (let s = 0; s <= STREAM.len; s += 0.5) {
     const cy = latToY(centerlineAt(s));
-    const wPx = trueBankfullAt(s) * 5.5;
+    const wPx = trueBankfullAt(s) * 7.5;
     leftBank.push([sToX(s), cy - wPx * 0.5]);
     rightBank.push([sToX(s), cy + wPx * 0.5]);
     wetLeft.push([sToX(s), cy - wPx * 0.32]);
@@ -999,7 +1326,7 @@ function layoutCanvas() {
   state.bankfullMeasurements.forEach((m, i) => {
     const x = sToX(m.s);
     const y = latToY(centerlineAt(m.s));
-    const wPx = m.value * 5.5;
+    const wPx = m.value * 7.5;
     measureMarkers += `
       <line x1="${x}" y1="${y - wPx*0.5 - 12}" x2="${x}" y2="${y + wPx*0.5 + 12}" stroke="#b4471f" stroke-width="1.4" stroke-dasharray="3 2"/>
       <circle cx="${x}" cy="${y}" r="4" fill="#b4471f" stroke="#fdfaf0" stroke-width="1.2"/>
@@ -1034,7 +1361,7 @@ function layoutCanvas() {
       if (s > STREAM.len) continue;
       const x = sToX(s);
       const y = latToY(centerlineAt(s));
-      const w = trueBankfullAt(s) * 5.5;
+      const w = trueBankfullAt(s) * 7.5;
       const placed = t < nPlaced;
       const next = t === nPlaced && phase === 'transects';
       const color = placed ? '#4a7d3d' : (next ? '#b4471f' : '#8a7e60');
@@ -1085,7 +1412,7 @@ function layoutCanvas() {
         for (let s = 2; s < STREAM.len; s += 6) {
           const x = sToX(s);
           const y = latToY(centerlineAt(s));
-          const w = trueBankfullAt(s) * 5.5;
+          const w = trueBankfullAt(s) * 7.5;
           r += `<path d="M ${x-w*0.2} ${y - w*0.1} Q ${x} ${y - w*0.18} ${x+w*0.2} ${y - w*0.1}" stroke="#fdfaf0" stroke-width="0.5" fill="none" opacity="0.4"/>`;
         }
         return r;
@@ -1107,7 +1434,7 @@ function layoutCanvas() {
         <text x="${5 * (W-120)/STREAM.len}" y="-6" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5a4f38">10 m</text>
       </g>
       <!-- Compass / flow -->
-      <text x="${W-50}" y="30" font-family="Caveat" font-size="22" fill="#b4471f">flow →</text>
+      <text x="${W-30}" y="36" text-anchor="end" font-family="Caveat" font-size="26" fill="#b4471f">flow →</text>
     </svg>
     <div id="layout-help" style="margin-top: 14px; min-height: 60px;"></div>
   `;
@@ -1138,21 +1465,25 @@ function layoutCanvas() {
         // measurement value is the true bankfull at that point + small noise (user error)
         const noise = (Math.random() - 0.5) * 0.4;
         const value = +(trueBankfullAt(s) + noise).toFixed(1);
-        state.bankfullMeasurements.push({ s, value });
-        addRipple(svg, e.clientX, e.clientY);
-        sfx.waterDrop();
-        if (state.bankfullMeasurements.length === 5) {
-          // Calculate average → width category
-          const avg = state.bankfullMeasurements.reduce((a,b)=>a+b.value,0) / 5;
-          state.widthCategory = computeWidthCategory(avg);
-          // scoring
-          const trueAvg = STREAM.samples.slice(0, Math.ceil(trueBfwAtBOS*8)).reduce((a,b)=>a+b.bfw,0) / Math.ceil(trueBfwAtBOS*8);
-          if (Math.abs(avg - trueAvg) < 0.5) state.scoreNotes.layout.push('Bankfull widths well-measured.');
-          state.score.layout += 50;
-          sfx.stageComplete();
-          toast(`Average BFW = <b>${avg.toFixed(2)} m</b> → site width category <b>${state.widthCategory} m</b>`, 'ok', 4500);
-        }
-        render();
+        sfx.tapePull();
+        animateTapePull(svg, s, value, latToY, sToX, () => {
+          state.bankfullMeasurements.push({ s, value });
+          sfx.waterDrop();
+          if (state.bankfullMeasurements.length === 5) {
+            // Calculate average → width category
+            const avg = state.bankfullMeasurements.reduce((a,b)=>a+b.value,0) / 5;
+            state.widthCategory = computeWidthCategory(avg);
+            // scoring
+            const trueAvg = STREAM.samples.slice(0, Math.ceil(trueBfwAtBOS*8)).reduce((a,b)=>a+b.bfw,0) / Math.ceil(trueBfwAtBOS*8);
+            if (Math.abs(avg - trueAvg) < 0.5) state.scoreNotes.layout.push('Bankfull widths well-measured.');
+            state.score.layout += 50;
+            capScore('layout');
+            sfx.stageComplete();
+            toast(`Average BFW = <b>${avg.toFixed(2)} m</b> → site width category <b>${state.widthCategory} m</b>`, 'ok', 4500);
+          }
+          render();
+        });
+        return; // animation handles render()
       } else if (phase === 'transects') {
         const t = state.transectsPlaced;
         const expected = t * state.widthCategory;
@@ -1160,17 +1491,35 @@ function layoutCanvas() {
           toast(`Transect ${t+1} should be <b>${state.widthCategory} m</b> from the previous one. Tap closer to the highlighted line.`, 'bad', 3500);
           return;
         }
-        state.transectsPlaced++;
-        addRipple(svg, e.clientX, e.clientY);
-        sfx.pinSet();
-        if (state.transectsPlaced >= 11) {
-          state.transectsLocked = true;
-          state.score.layout += 50;
-          state.scoreNotes.layout.push('All 11 transects placed at correct spacing.');
-          sfx.stageComplete();
-          toast(`<b>Site complete.</b> 11 transects, ${(10 * state.widthCategory)} m total reach.`, 'ok', 5000);
+        // For transect 1 (at BOS), no upstream tape-pull is needed — just place the flag.
+        // For transects 2-11, animate the tape running upstream from the previous transect.
+        const placeTransect = () => {
+          state.transectsPlaced++;
+          sfx.pinSet();
+          if (state.transectsPlaced >= 11) {
+            state.transectsLocked = true;
+            state.score.layout += 50;
+            capScore('layout');
+            state.scoreNotes.layout.push('All 11 transects placed at correct spacing.');
+            sfx.stageComplete();
+            toast(`<b>Site complete.</b> 11 transects, ${(10 * state.widthCategory)} m total reach.`, 'ok', 5000);
+          }
+          render();
+        };
+
+        if (t === 0) {
+          // Transect 1 — placed at BOS, no tape walk
+          sfx.pinSet();
+          placeTransect();
+        } else {
+          // Transect n — pull tape from transect (n-1) upstream by widthCategory meters
+          const sPrev = (t - 1) * state.widthCategory;
+          const sNew = t * state.widthCategory;
+          const distance = sNew - sPrev;
+          sfx.tapePull();
+          animateLongitudinalTape(svg, sPrev, sNew, distance, latToY, sToX, placeTransect);
         }
-        render();
+        return; // animation handles render()
       }
     });
 
@@ -1226,6 +1575,254 @@ function addRipple(svg, clientX, clientY) {
   setTimeout(() => c1.remove(), 800);
 }
 
+// =====================================================================
+// Animated longitudinal tape pull (along the channel)
+// Visualizes a surveyor walking upstream pulling the tape along the bank,
+// from one transect (or BOS) to the next, to set transect spacing.
+// =====================================================================
+function animateLongitudinalTape(svg, sFromMeters, sToMeters, distanceMeters, latToY, sToX, onComplete) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const fromX = sToX(sFromMeters);
+  const fromY = latToY(centerlineAt(sFromMeters));
+  const toX = sToX(sToMeters);
+  const toY = latToY(centerlineAt(sToMeters));
+
+  // STRAIGHT-LINE tape — the protocol explicitly requires straight-line distance
+  // between transects ("do not measure along the thalweg or bend the tape around
+  // meander bends"). The tape goes from previous transect to next transect in a
+  // single straight segment, even where it cuts across the inside of meander bends.
+  const pathD = `M ${fromX} ${fromY} L ${toX} ${toY}`;
+
+  const g = document.createElementNS(ns, 'g');
+  g.setAttribute('class', 'long-tape-anim');
+  g.style.pointerEvents = 'none';
+  svg.appendChild(g);
+
+  const DURATION = 850; // ms
+
+  // ---- Reel/spool at the starting point (BOS or previous transect) ----
+  const reel = document.createElementNS(ns, 'g');
+  reel.innerHTML = `
+    <circle cx="${fromX}" cy="${fromY}" r="9" fill="#fdfaf0" stroke="#2a2418" stroke-width="2"/>
+    <circle cx="${fromX}" cy="${fromY}" r="3.5" fill="#2a2418"/>
+    <rect x="${fromX - 14}" y="${fromY + 12}" width="28" height="11" fill="#b4471f" stroke="#2a2418" stroke-width="1"/>
+    <text x="${fromX}" y="${fromY + 20}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#fdfaf0" font-weight="700">0 m</text>
+  `;
+  g.appendChild(reel);
+
+  // ---- The tape line — straight-line path drawn progressively ----
+  const tape = document.createElementNS(ns, 'path');
+  tape.setAttribute('d', pathD);
+  tape.setAttribute('stroke', '#f4c83a');
+  tape.setAttribute('stroke-width', '2.5');
+  tape.setAttribute('stroke-linecap', 'round');
+  tape.setAttribute('fill', 'none');
+  svg.appendChild(tape); // append before getTotalLength()
+  const totalLen = tape.getTotalLength();
+  tape.setAttribute('stroke-dasharray', totalLen);
+  tape.setAttribute('stroke-dashoffset', totalLen);
+  g.appendChild(tape);
+
+  // Stripe (dashed inner pattern, also progressive)
+  const stripe = document.createElementNS(ns, 'path');
+  stripe.setAttribute('d', pathD);
+  stripe.setAttribute('stroke', '#2a2418');
+  stripe.setAttribute('stroke-width', '0.6');
+  stripe.setAttribute('fill', 'none');
+  stripe.setAttribute('stroke-dasharray', '3 3');
+  stripe.setAttribute('opacity', '0.55');
+  g.appendChild(stripe);
+
+  // ---- Surveyor / puller marker ----
+  const puller = document.createElementNS(ns, 'g');
+  puller.innerHTML = `
+    <circle cx="0" cy="0" r="6" fill="#fdfaf0" stroke="#2a2418" stroke-width="1.5"/>
+    <circle cx="0" cy="0" r="2.5" fill="#b4471f"/>
+  `;
+  puller.setAttribute('transform', `translate(${fromX} ${fromY})`);
+  g.appendChild(puller);
+
+  // ---- Live readout ----
+  const readoutY = Math.min(fromY, toY) - 26;
+  const readoutX = (fromX + toX) / 2;
+  const readout = document.createElementNS(ns, 'g');
+  readout.innerHTML = `
+    <rect class="long-readout-bg" x="${readoutX - 32}" y="${readoutY - 12}" width="64" height="16"
+          fill="#fdfaf0" stroke="#2a2418" stroke-width="1"/>
+    <text class="long-readout-text" x="${readoutX}" y="${readoutY}" text-anchor="middle"
+          font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#2a2418">0.0 m</text>
+  `;
+  readout.style.opacity = '0';
+  g.appendChild(readout);
+
+  // ---- Animate ----
+  const start = performance.now();
+  function frame(now) {
+    const t = Math.min(1, (now - start) / DURATION);
+    const eased = 1 - Math.pow(1 - t, 3); // ease-out
+
+    // Reveal the tape progressively
+    tape.setAttribute('stroke-dashoffset', totalLen * (1 - eased));
+    stripe.setAttribute('stroke-dashoffset', totalLen * (1 - eased));
+
+    // Move the puller along the straight path
+    const along = tape.getPointAtLength(totalLen * eased);
+    puller.setAttribute('transform', `translate(${along.x} ${along.y})`);
+
+    // Move the readout to follow the puller, offset upward
+    const txt = readout.querySelector('.long-readout-text');
+    const bg = readout.querySelector('.long-readout-bg');
+    if (txt && bg) {
+      txt.setAttribute('x', along.x);
+      txt.setAttribute('y', along.y - 14);
+      bg.setAttribute('x', along.x - 32);
+      bg.setAttribute('y', along.y - 26);
+      txt.textContent = (eased * distanceMeters).toFixed(1) + ' m';
+    }
+
+    if (t > 0.05) readout.style.opacity = '1';
+
+    if (t < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      // Final snap
+      const txt2 = readout.querySelector('.long-readout-text');
+      const bg2 = readout.querySelector('.long-readout-bg');
+      if (txt2) txt2.textContent = distanceMeters.toFixed(1) + ' m';
+      if (bg2) bg2.setAttribute('fill', '#b4471f');
+      if (txt2) txt2.setAttribute('fill', '#fdfaf0');
+      sfx.tapeStop();
+      setTimeout(() => {
+        g.remove();
+        if (typeof onComplete === 'function') onComplete();
+      }, 450);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+// =====================================================================
+// Animated measuring-tape pull
+// Visualizes a surveyor unspooling a tape from one bank to the other.
+// =====================================================================
+function animateTapePull(svg, sMeters, valueMeters, latToY, sToX, onComplete) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const cy = latToY(centerlineAt(sMeters));
+  const cx = sToX(sMeters);
+
+  // Compute the bank endpoints. The actual stream is wider in pixels here:
+  const halfWidthPx = trueBankfullAt(sMeters) * 7.5 * 0.5;  // matches the rendering scale
+  const leftX = cx, leftY = cy - halfWidthPx;
+  const rightX = cx, rightY = cy + halfWidthPx;
+
+  // Group everything for easy cleanup
+  const g = document.createElementNS(ns, 'g');
+  g.setAttribute('class', 'tape-anim');
+  g.style.pointerEvents = 'none';
+  svg.appendChild(g);
+
+  const DURATION = 850; // ms
+
+  // ---- Reel/spool at the left bank (the starting end of the tape) ----
+  // A small drum with a "0 m" tag — the surveyor's hand
+  const reel = document.createElementNS(ns, 'g');
+  reel.innerHTML = `
+    <circle cx="${leftX}" cy="${leftY}" r="9" fill="#fdfaf0" stroke="#2a2418" stroke-width="2"/>
+    <circle cx="${leftX}" cy="${leftY}" r="3.5" fill="#2a2418"/>
+    <rect x="${leftX - 16}" y="${leftY - 22}" width="22" height="11" fill="#b4471f" stroke="#2a2418" stroke-width="1"/>
+    <text x="${leftX - 5}" y="${leftY - 13}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#fdfaf0" font-weight="700">0 m</text>
+  `;
+  g.appendChild(reel);
+
+  // ---- The tape line, animated to extend from left bank to right bank ----
+  const tape = document.createElementNS(ns, 'line');
+  tape.setAttribute('x1', leftX);
+  tape.setAttribute('y1', leftY);
+  tape.setAttribute('x2', leftX);
+  tape.setAttribute('y2', leftY);
+  tape.setAttribute('stroke', '#f4c83a');
+  tape.setAttribute('stroke-width', '2.5');
+  tape.setAttribute('stroke-linecap', 'round');
+  g.appendChild(tape);
+
+  // Subtle dark inner stripe to suggest a real measuring-tape look
+  const tapeStripe = document.createElementNS(ns, 'line');
+  tapeStripe.setAttribute('x1', leftX);
+  tapeStripe.setAttribute('y1', leftY);
+  tapeStripe.setAttribute('x2', leftX);
+  tapeStripe.setAttribute('y2', leftY);
+  tapeStripe.setAttribute('stroke', '#2a2418');
+  tapeStripe.setAttribute('stroke-width', '0.6');
+  tapeStripe.setAttribute('stroke-dasharray', '3 3');
+  tapeStripe.setAttribute('opacity', '0.55');
+  g.appendChild(tapeStripe);
+
+  // ---- The far-end "puller" — a marker that travels to the opposite bank ----
+  const puller = document.createElementNS(ns, 'g');
+  puller.innerHTML = `
+    <circle cx="0" cy="0" r="6" fill="#fdfaf0" stroke="#2a2418" stroke-width="1.5"/>
+    <circle cx="0" cy="0" r="2.5" fill="#b4471f"/>
+  `;
+  puller.setAttribute('transform', `translate(${leftX} ${leftY})`);
+  g.appendChild(puller);
+
+  // ---- Live readout label — number ticks up as the tape extends ----
+  const readout = document.createElementNS(ns, 'g');
+  const labelPad = 8;
+  const labelX = (leftX + rightX) / 2;
+  // Place the label above or below the channel so it doesn't overlap
+  const labelAbove = leftY < cy;  // since left bank is at top of channel here, label above
+  const labelY = leftY - 18;
+  readout.innerHTML = `
+    <rect class="tape-readout-bg" x="${labelX - 28}" y="${labelY - 12}" width="56" height="16"
+          fill="#fdfaf0" stroke="#2a2418" stroke-width="1"/>
+    <text class="tape-readout-text" x="${labelX}" y="${labelY}" text-anchor="middle"
+          font-family="JetBrains Mono" font-size="11" font-weight="700" fill="#2a2418">0.0 m</text>
+  `;
+  readout.style.opacity = '0';
+  g.appendChild(readout);
+
+  // ---- Animate ----
+  const start = performance.now();
+  function frame(now) {
+    const t = Math.min(1, (now - start) / DURATION);
+    // Ease-out cubic
+    const eased = 1 - Math.pow(1 - t, 3);
+    const curX = leftX + (rightX - leftX) * eased;
+    const curY = leftY + (rightY - leftY) * eased;
+    tape.setAttribute('x2', curX);
+    tape.setAttribute('y2', curY);
+    tapeStripe.setAttribute('x2', curX);
+    tapeStripe.setAttribute('y2', curY);
+    puller.setAttribute('transform', `translate(${curX} ${curY})`);
+
+    // Show readout once the tape has any extension
+    if (t > 0.05) readout.style.opacity = '1';
+    const displayedMeters = (eased * valueMeters);
+    const txt = readout.querySelector('.tape-readout-text');
+    if (txt) txt.textContent = displayedMeters.toFixed(1) + ' m';
+
+    if (t < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      // Snap to exact value, then hold briefly so the user can read it
+      const txt2 = readout.querySelector('.tape-readout-text');
+      if (txt2) txt2.textContent = valueMeters.toFixed(1) + ' m';
+      // Highlight the readout
+      const bg = readout.querySelector('.tape-readout-bg');
+      if (bg) { bg.setAttribute('fill', '#b4471f'); }
+      if (txt2) txt2.setAttribute('fill', '#fdfaf0');
+      sfx.tapeStop();
+      // Clean up after a brief hold
+      setTimeout(() => {
+        g.remove();
+        if (typeof onComplete === 'function') onComplete();
+      }, 450);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
 function computeWidthCategory(avg) {
   if (avg <= 6) return 6;
   if (avg <= 8) return 8;
@@ -1235,6 +1832,11 @@ function computeWidthCategory(avg) {
   if (avg <= 16) return 16;
   if (avg <= 18) return 18;
   return 20;
+}
+
+// Helper: clamp a stage score to [0, 100]
+function capScore(stageKey) {
+  state.score[stageKey] = Math.max(0, Math.min(100, state.score[stageKey]));
 }
 
 function layoutSidebar() {
@@ -1268,6 +1870,7 @@ function layoutSidebar() {
           <div><b>SITE:</b> Big Fish Creek 03-A</div>
           <div><b>BOS UTM:</b> 10T 542819 E / 4768214 N</div>
           <div><b>DATE:</b> ${formatToday()}</div>
+          <div><b>OBSERVER:</b> ${state.crewName || '—'}</div>
         </div>
       </div>
       <div>
@@ -1403,8 +2006,8 @@ function crossSectionCanvas() {
   const ti = state.csTransect;
 
   const profile = bedProfile(ti);
-  const W = 1200, H = 560;
-  const padX = 100, padY = 80;
+  const W = 1200, H = 580;
+  const padX = 100, padY = 100;
   const xnToPx = xn => padX + xn * (W - 2*padX);
   const depthToY = d => padY + d * 280;  // 1m = 280px (was 200)
 
@@ -1541,6 +2144,39 @@ function crossSectionCanvas() {
       <text x="${W - padX + 8}" y="${tapeY + 4}" font-family="JetBrains Mono" font-size="10" fill="${'#2a2418'}">${bfw.toFixed(1)} m</text>
       <text x="${W/2}" y="${padY - 22}" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="${'#2a2418'}" letter-spacing="0.15em">BANKFULL TAPE</text>
 
+      <!-- Wetted edge annotations: vertical drop lines from the tape down to where the water surface meets the bed -->
+      ${(() => {
+        const wL = profile.wetLeft;  // normalized 0..1
+        const wR = profile.wetRight;
+        const xL = xnToPx(wL);
+        const xR = xnToPx(wR);
+        const wettedW_m = (wR - wL) * bfw;
+        const lWet_m = wL * bfw;
+        const rWet_m = wR * bfw;
+        return `
+          <!-- Left wetted edge -->
+          <line x1="${xL}" y1="${tapeY + 4}" x2="${xL}" y2="${waterY}"
+                stroke="#4a6878" stroke-width="1.2" stroke-dasharray="4 3"/>
+          <text x="${xL}" y="${tapeY - 32}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" font-weight="700" fill="#4a6878" letter-spacing="0.05em">L WET</text>
+          <text x="${xL}" y="${tapeY - 20}" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#4a6878">${lWet_m.toFixed(1)} m</text>
+
+          <!-- Right wetted edge -->
+          <line x1="${xR}" y1="${tapeY + 4}" x2="${xR}" y2="${waterY}"
+                stroke="#4a6878" stroke-width="1.2" stroke-dasharray="4 3"/>
+          <text x="${xR}" y="${tapeY - 32}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" font-weight="700" fill="#4a6878" letter-spacing="0.05em">R WET</text>
+          <text x="${xR}" y="${tapeY - 20}" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#4a6878">${rWet_m.toFixed(1)} m</text>
+
+          <!-- Wetted width dimension arrow (between the two edges, slightly above the water) -->
+          <g stroke="#4a6878" fill="#4a6878">
+            <line x1="${xL + 4}" y1="${waterY - 8}" x2="${xR - 4}" y2="${waterY - 8}" stroke-width="1.2"/>
+            <polygon points="${xL+4},${waterY - 8} ${xL+10},${waterY - 11} ${xL+10},${waterY - 5}"/>
+            <polygon points="${xR-4},${waterY - 8} ${xR-10},${waterY - 11} ${xR-10},${waterY - 5}"/>
+            <rect x="${(xL+xR)/2 - 32}" y="${waterY - 18}" width="64" height="14" fill="#fdfaf0" stroke="#4a6878" stroke-width="0.8"/>
+            <text x="${(xL+xR)/2}" y="${waterY - 8}" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#4a6878" stroke="none" font-weight="600">wetted W = ${wettedW_m.toFixed(2)} m</text>
+          </g>
+        `;
+      })()}
+
       ${lbBank}
 
       <!-- Bed line itself -->
@@ -1599,16 +2235,24 @@ function crossSectionCanvas() {
       sfx.depthRod(measured_bf);
       if (state.csMeasurements.length === 11) {
         state.csComplete = true;
-        state.score.crosssection += 50;
-        state.scoreNotes.crosssection.push(`Cross section complete at transect ${ti}.`);
-        // Compute mean depth, area for fun
-        const meanD = state.csMeasurements.reduce((a,b)=>a+b.bf_depth,0)/11;
-        // Count close-to-truth measurements
+        // Score: 50 base for completing the cross-section + up to 50 for accuracy
         const close = state.csMeasurements.filter((m, i) => {
           const xn = m.x_real / bfw;
           const truth = profile.bedDepth(xn);
           return Math.abs(m.bf_depth - truth) < 0.08;
         }).length;
+        const accuracyPct = close / 11; // 0–1
+        const earnedThisRun = 50 + Math.round(accuracyPct * 50);
+        // Only credit once at the highest score across all attempts
+        if (earnedThisRun > state.score.crosssection) {
+          state.score.crosssection = earnedThisRun;
+        }
+        capScore('crosssection');
+        if (!state.scoreNotes.crosssection.find(n => n.startsWith('Cross section complete'))) {
+          state.scoreNotes.crosssection.push(`Cross section complete at transect ${ti}.`);
+        }
+        // Compute mean depth, area for fun
+        const meanD = state.csMeasurements.reduce((a,b)=>a+b.bf_depth,0)/11;
         sfx.stageComplete();
         toast(`<b>Cross section logged.</b> Mean BF depth = ${meanD.toFixed(2)} m · ${close}/11 within field tolerance`, 'ok', 4500);
       }
@@ -1622,13 +2266,15 @@ function crossSectionCanvas() {
           <div class="hand" style="font-size: 36px; color: var(--rust); line-height: 1;">${state.csMeasurements.length+1}/11</div>
           <div style="font-size: 14px; color: var(--ink-soft); line-height: 1.5;">
             <b>Drop the depth rod</b> at the highlighted spot. The interval is bankfull width (${bfw.toFixed(1)}&nbsp;m) ÷ 10.
-            Both <b>bankfull depth</b> (top of tape to bed) and <b>wetted depth</b> (water surface to bed) are recorded.
+            Two readings get recorded each time: <b style="color: var(--ink);">bankfull depth</b> (top of tape down to bed) and <b style="color: var(--water-2);">wetted depth</b> (water surface down to bed). Outside the wetted edges, wetted depth is 0 by definition.
             ${state.csMeasurements.length === 0 ? `<br/><span style="font-style: italic; color: var(--ink-faint);">First measurement is at 0 m — bankfull depth is 0 here by definition (you're at the bank top).</span>` : ''}
+            <br/><span style="font-size: 12px; color: var(--water-2);"><b>Wetted width</b> = right wetted edge − left wetted edge, shown above the water on the diagram.</span>
           </div>
         </div>`;
     } else {
       const meanD = state.csMeasurements.reduce((a,b)=>a+b.bf_depth,0)/11;
       const wetMeasures = state.csMeasurements.filter(m => m.w_depth > 0);
+      const meanWetD = wetMeasures.length ? wetMeasures.reduce((a,b)=>a+b.w_depth,0)/wetMeasures.length : 0;
       const wettedW = profile.wetRight - profile.wetLeft;
       // Compute per-point accuracy
       const close = state.csMeasurements.filter((m, i) => {
@@ -1636,20 +2282,22 @@ function crossSectionCanvas() {
         const truth = profile.bedDepth(xn);
         return Math.abs(m.bf_depth - truth) < 0.08;
       }).length;
-      // Calculate cross-sectional area (trapezoidal)
-      let area = 0;
+      // Calculate bankfull cross-sectional area and wetted area (trapezoidal)
+      let bfAreaCalc = 0, wAreaCalc = 0;
       for (let i = 0; i < state.csMeasurements.length - 1; i++) {
         const dx = state.csMeasurements[i+1].x_real - state.csMeasurements[i].x_real;
-        area += dx * (state.csMeasurements[i].bf_depth + state.csMeasurements[i+1].bf_depth) / 2;
+        bfAreaCalc += dx * (state.csMeasurements[i].bf_depth + state.csMeasurements[i+1].bf_depth) / 2;
+        wAreaCalc  += dx * (state.csMeasurements[i].w_depth  + state.csMeasurements[i+1].w_depth ) / 2;
       }
       help.innerHTML = `
         <div style="border-left: 3px solid var(--green-ok); padding: 14px 18px; background: rgba(74,125,61,0.08);">
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
-            <div style="display: flex; gap: 24px; flex-wrap: wrap; font-size: 13px;">
-              <div><b style="font-family: 'JetBrains Mono'; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft);">Mean BF depth</b><br/><span class="mono" style="font-size: 16px;">${meanD.toFixed(2)} m</span></div>
-              <div><b style="font-family: 'JetBrains Mono'; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft);">Wetted W</b><br/><span class="mono" style="font-size: 16px;">${(wettedW * bfw).toFixed(1)} m</span></div>
-              <div><b style="font-family: 'JetBrains Mono'; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft);">XS area</b><br/><span class="mono" style="font-size: 16px;">${area.toFixed(2)} m²</span></div>
-              <div><b style="font-family: 'JetBrains Mono'; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft);">Accuracy</b><br/><span class="mono" style="font-size: 16px; color: ${close >= 9 ? 'var(--green-ok)' : close >= 6 ? 'var(--gold)' : 'var(--red-bad)'};">${close}/11</span></div>
+            <div style="display: flex; gap: 22px; flex-wrap: wrap; font-size: 13px;">
+              <div><b style="font-family: 'JetBrains Mono'; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft);">Mean BF depth</b><br/><span class="mono" style="font-size: 16px;">${meanD.toFixed(2)} m</span></div>
+              <div><b style="font-family: 'JetBrains Mono'; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--water-2);">Mean wetted depth</b><br/><span class="mono" style="font-size: 16px; color: var(--water-2);">${meanWetD.toFixed(2)} m</span></div>
+              <div><b style="font-family: 'JetBrains Mono'; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--water-2);">Wetted W</b><br/><span class="mono" style="font-size: 16px; color: var(--water-2);">${(wettedW * bfw).toFixed(2)} m</span></div>
+              <div><b style="font-family: 'JetBrains Mono'; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft);">BF area</b><br/><span class="mono" style="font-size: 16px;">${bfAreaCalc.toFixed(2)} m²</span></div>
+              <div><b style="font-family: 'JetBrains Mono'; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft);">Accuracy</b><br/><span class="mono" style="font-size: 16px; color: ${close >= 9 ? 'var(--green-ok)' : close >= 6 ? 'var(--gold)' : 'var(--red-bad)'};">${close}/11</span></div>
             </div>
             <button class="btn btn-primary" onclick="goStage('units')">Continue →</button>
           </div>
@@ -1670,9 +2318,30 @@ function crossSectionSidebar() {
 
   const ti = state.csTransect;
   const profile = bedProfile(ti);
+  const bfw = profile.bfw;
+  const wettedW_m = (profile.wetRight - profile.wetLeft) * bfw;
+  const lWet_m = profile.wetLeft * bfw;
+  const rWet_m = profile.wetRight * bfw;
+
+  // Computed metrics from current measurements
+  const measured = state.csMeasurements;
+  let bfArea = 0, wArea = 0, meanBfDepth = null, meanWDepth = null, maxWDepth = null;
+  if (measured.length >= 2) {
+    for (let i = 0; i < measured.length - 1; i++) {
+      const dx = measured[i+1].x_real - measured[i].x_real;
+      bfArea += dx * (measured[i].bf_depth + measured[i+1].bf_depth) / 2;
+      wArea += dx * (measured[i].w_depth + measured[i+1].w_depth) / 2;
+    }
+  }
+  if (measured.length === 11) {
+    meanBfDepth = measured.reduce((a, m) => a + m.bf_depth, 0) / 11;
+    const wetOnly = measured.filter(m => m.w_depth > 0);
+    meanWDepth = wetOnly.length ? wetOnly.reduce((a, m) => a + m.w_depth, 0) / wetOnly.length : 0;
+    maxWDepth = Math.max(...measured.map(m => m.w_depth));
+  }
 
   s.innerHTML = `
-    <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 28px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 28px;">
       <div>
         <h4 class="display" style="margin: 0 0 14px; font-size: 18px;">Cross-section log · T${ti}</h4>
         <div style="overflow-x: auto;">
@@ -1687,21 +2356,78 @@ function crossSectionSidebar() {
             </thead>
             <tbody>
               ${[...Array(11)].map((_, i) => {
-                const m = state.csMeasurements[i];
-                return `<tr style="border-bottom: 1px dotted var(--ink-faint);">
+                const m = measured[i];
+                const isWet = m && m.w_depth > 0;
+                return `<tr style="border-bottom: 1px dotted var(--ink-faint); ${isWet ? 'background: rgba(74,104,120,0.06);' : ''}">
                   <td style="padding: 4px 0;">${i+1}</td>
                   <td style="padding: 4px 4px; text-align: right;">${m ? m.x_real.toFixed(2) : '—'}</td>
                   <td style="padding: 4px 4px; text-align: right; ${m ? '' : 'color: var(--ink-faint);'}">${m ? m.bf_depth.toFixed(2) : '—'}</td>
-                  <td style="padding: 4px 0; text-align: right; ${m ? '' : 'color: var(--ink-faint);'}">${m ? m.w_depth.toFixed(2) : '—'}</td>
+                  <td style="padding: 4px 0; text-align: right; ${m ? (isWet ? 'color: var(--water-2); font-weight: 600;' : 'color: var(--ink-faint);') : 'color: var(--ink-faint);'}">${m ? m.w_depth.toFixed(2) : '—'}</td>
                 </tr>`;
               }).join('')}
             </tbody>
           </table>
+          <div style="font-size: 10px; color: var(--ink-faint); margin-top: 6px; font-style: italic;">
+            Rows shaded blue are inside the wetted channel.
+          </div>
         </div>
       </div>
+
+      <div>
+        <h5 style="margin: 0 0 10px; font-size: 12px; font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 0.1em;">Channel widths · T${ti}</h5>
+        <table style="width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono'; font-size: 12px;">
+          <tr style="border-bottom: 1px dotted var(--ink-faint);">
+            <td style="padding: 5px 0;">Bankfull width</td>
+            <td style="padding: 5px 0; text-align: right; font-weight: 600;">${bfw.toFixed(2)} m</td>
+          </tr>
+          <tr style="border-bottom: 1px dotted var(--ink-faint); color: var(--water-2);">
+            <td style="padding: 5px 0;">Left wetted (L<sub>w</sub>)</td>
+            <td style="padding: 5px 0; text-align: right;">${lWet_m.toFixed(2)} m</td>
+          </tr>
+          <tr style="border-bottom: 1px dotted var(--ink-faint); color: var(--water-2);">
+            <td style="padding: 5px 0;">Right wetted (R<sub>w</sub>)</td>
+            <td style="padding: 5px 0; text-align: right;">${rWet_m.toFixed(2)} m</td>
+          </tr>
+          <tr style="border-bottom: 2px solid var(--water-2); font-weight: 600; color: var(--water-2);">
+            <td style="padding: 6px 0;">Wetted width = R<sub>w</sub> − L<sub>w</sub></td>
+            <td style="padding: 6px 0; text-align: right;">${wettedW_m.toFixed(2)} m</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: var(--ink-faint); font-size: 11px;">Wetted / bankfull</td>
+            <td style="padding: 6px 0; text-align: right; color: var(--ink-faint); font-size: 11px;">${(wettedW_m/bfw*100).toFixed(0)}%</td>
+          </tr>
+        </table>
+
+        ${measured.length === 11 ? `
+          <h5 style="margin: 18px 0 10px; font-size: 12px; font-family: 'JetBrains Mono'; text-transform: uppercase; letter-spacing: 0.1em;">Computed metrics</h5>
+          <table style="width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono'; font-size: 11px;">
+            <tr style="border-bottom: 1px dotted var(--ink-faint);">
+              <td style="padding: 4px 0;">Mean BF depth</td>
+              <td style="padding: 4px 0; text-align: right;">${meanBfDepth.toFixed(2)} m</td>
+            </tr>
+            <tr style="border-bottom: 1px dotted var(--ink-faint); color: var(--water-2);">
+              <td style="padding: 4px 0;">Mean wetted depth</td>
+              <td style="padding: 4px 0; text-align: right;">${meanWDepth.toFixed(2)} m</td>
+            </tr>
+            <tr style="border-bottom: 1px dotted var(--ink-faint); color: var(--water-2);">
+              <td style="padding: 4px 0;">Max wetted depth</td>
+              <td style="padding: 4px 0; text-align: right;">${maxWDepth.toFixed(2)} m</td>
+            </tr>
+            <tr style="border-bottom: 1px dotted var(--ink-faint);">
+              <td style="padding: 4px 0;">BF area (trapezoidal)</td>
+              <td style="padding: 4px 0; text-align: right;">${bfArea.toFixed(2)} m²</td>
+            </tr>
+            <tr style="color: var(--water-2);">
+              <td style="padding: 4px 0;">Wetted area</td>
+              <td style="padding: 4px 0; text-align: right;">${wArea.toFixed(2)} m²</td>
+            </tr>
+          </table>
+        ` : ''}
+      </div>
+
       <div style="padding: 14px 18px; background: rgba(192,138,42,0.08); border-left: 3px solid var(--gold); font-size: 13px; line-height: 1.55; align-self: start;">
-        <b style="color: var(--gold); text-transform: uppercase; font-size: 11px; font-family: 'JetBrains Mono'; letter-spacing: 0.1em;">Why this matters</b><br/>
-        <b>Bankfull depth</b> describes channel <i>capacity</i> — independent of today's flow. <b>Wetted depth</b> reflects current conditions and habitat for fish. The 11-point grid lets you compute mean depth, max depth, and cross-sectional area without a full bathymetric survey.
+        <b style="color: var(--gold); text-transform: uppercase; font-size: 11px; font-family: 'JetBrains Mono'; letter-spacing: 0.1em;">Why two width pairs?</b><br/>
+        <b>Bankfull width &amp; depth</b> describe channel <i>capacity</i> — independent of today's flow. <b>Wetted width &amp; depth</b> reflect current conditions and habitat for fish. Wetted width / bankfull width is a quick flow indicator: 100% means the channel is full; 30% suggests low summer flow.
       </div>
     </div>
   `;
@@ -2132,6 +2858,7 @@ function stageUnits() {
       state.unitsComplete = true;
       state.unitsWrong = wrongUnits;
       state.score.units = Math.round(pct);
+      capScore('units');
       state.scoreNotes.units.push(`${correct}/${total} units classified correctly (${pct.toFixed(0)}%).`);
       const boundaryDelta = Math.abs(state.unitBoundaries.length - 1 - TRUE_UNITS.length);
       if (boundaryDelta === 0) state.scoreNotes.units.push('Correct number of channel units identified.');
@@ -2864,6 +3591,7 @@ function stageUndercut() {
       const pct = (correct/total)*100;
       state.undercutComplete = true;
       state.score.undercut = Math.round(pct);
+      capScore('undercut');
       state.scoreNotes.undercut.push(`${correct}/${total} undercuts evaluated correctly (${pct.toFixed(0)}%).`);
       sfx.stageComplete();
       render();
@@ -2904,6 +3632,36 @@ function stageUndercut() {
   return el;
 }
 
+// Helper: render a side-view fish silhouette inside an undercut cavity.
+// Used by undercutCard when fish_cover is true.
+function renderFish(cx, cy, size) {
+  // Salmonid-style profile: streamlined body, forked tail, dorsal fin, eye
+  const w = size, h = size * 0.5;
+  return `
+    <g transform="translate(${cx} ${cy})">
+      <!-- Body -->
+      <ellipse cx="0" cy="0" rx="${w*0.5}" ry="${h*0.45}" fill="#7a8a6e" stroke="#2a2418" stroke-width="0.7"/>
+      <!-- Light underbelly -->
+      <ellipse cx="0" cy="${h*0.15}" rx="${w*0.42}" ry="${h*0.22}" fill="#c8d0b8" opacity="0.7"/>
+      <!-- Tail -->
+      <path d="M ${w*0.45} 0 L ${w*0.7} ${-h*0.5} L ${w*0.65} 0 L ${w*0.7} ${h*0.5} Z" fill="#7a8a6e" stroke="#2a2418" stroke-width="0.7"/>
+      <!-- Dorsal fin -->
+      <path d="M ${-w*0.05} ${-h*0.45} Q ${w*0.1} ${-h*0.75} ${w*0.2} ${-h*0.45} Z" fill="#5a6e4e" stroke="#2a2418" stroke-width="0.5"/>
+      <!-- Pectoral fin -->
+      <path d="M ${-w*0.15} ${h*0.1} Q ${-w*0.25} ${h*0.4} ${-w*0.05} ${h*0.35} Z" fill="#5a6e4e" stroke="#2a2418" stroke-width="0.5"/>
+      <!-- Eye -->
+      <circle cx="${-w*0.3}" cy="${-h*0.1}" r="${Math.max(1, w*0.06)}" fill="#fdfaf0"/>
+      <circle cx="${-w*0.3}" cy="${-h*0.1}" r="${Math.max(0.6, w*0.035)}" fill="#2a2418"/>
+      <!-- Gill mark -->
+      <path d="M ${-w*0.18} ${-h*0.25} Q ${-w*0.15} 0 ${-w*0.18} ${h*0.25}" stroke="#2a2418" stroke-width="0.5" fill="none"/>
+      <!-- Spotting (suggesting trout/salmonid) -->
+      <circle cx="${-w*0.05}" cy="${-h*0.18}" r="0.8" fill="#2a2418" opacity="0.6"/>
+      <circle cx="${w*0.1}" cy="${-h*0.05}" r="0.7" fill="#2a2418" opacity="0.5"/>
+      <circle cx="${w*0.2}" cy="${h*0.15}" r="0.6" fill="#2a2418" opacity="0.5"/>
+    </g>
+  `;
+}
+
 function undercutCard(u, decision) {
   const reasons = [];
   if (u.length < 1.0) reasons.push({ ok: false, txt: `length ${u.length} m`, req: '≥ 1.0' });
@@ -2917,14 +3675,35 @@ function undercutCard(u, decision) {
   const trueQ = trueQualifies(u);
   const userDecided = !!decision;
 
-  // Side-view sketch: shows water surface, bank lip with overhang, undercut depth, ceiling height
-  // Coordinate scaling: 1 cm = 1 px-ish, ceiling in meters → cm
-  const ceilingPx = u.ceiling * 60;       // ceiling height in px
-  const depthPx = u.depth_avg * 1.5;       // undercut depth (back of cave) in px
-  const waterY = 100;
-  const lipY = waterY - ceilingPx;         // lip of the undercut
-  const bankLeft = 30;
+  // --- Sketch geometry ---
+  // Canvas: 280×170. Coordinates: 1 cm vertical ≈ 1 px (for ceiling), 1 cm horizontal ≈ ~1.4 px (for depth)
+  const SVG_W = 280, SVG_H = 170;
+  const ceilingPx = u.ceiling * 60;       // ceiling height (m → px)
+  const depthPx = u.depth_avg * 1.5;       // undercut depth (cm → px)
+  // Normal water surface line — same y for all candidates so they're comparable
+  const waterY = 110;
+  const lipY = waterY - ceilingPx;
+  const bankLeft = 38;
   const undercutBackX = bankLeft + depthPx;
+
+  // When fish_cover is FALSE, water level is lower than normal — drawn LOWER than waterY,
+  // so the cavity entrance ends up partly above water (dewatered).
+  // We shift water down by enough to expose part of the cavity.
+  const lowFlowDrop = u.fish_cover ? 0 : Math.min(28, ceilingPx * 0.55);
+  const actualWaterY = waterY + lowFlowDrop;
+  // The cavity contains water only up to actualWaterY (or not at all if drop is huge)
+  const cavityWaterY = Math.max(actualWaterY, lipY); // cavity water surface clamped to ceiling level
+
+  // ---- Status badge & tint ----
+  const coverBadge = u.fish_cover
+    ? { color: 'var(--green-ok)', txt: '✓ FISH HABITAT', tint: 'rgba(74, 125, 61, 0.15)' }
+    : { color: 'var(--red-bad)',   txt: '✗ DEWATERED — NO COVER', tint: 'rgba(168, 58, 44, 0.18)' };
+
+  // ---- Fish silhouette (only if cover) ----
+  // Place fish in the cavity, fully submerged, at a sensible position
+  const fishX = bankLeft + Math.min(depthPx * 0.55, depthPx - 24);
+  const fishY = (cavityWaterY + lipY) / 2 + 4; // mid-cavity, slightly below water surface
+  const fishSize = Math.min(18, depthPx * 0.45);
 
   return `
     <div class="panel hover-lift" style="padding: 14px; ${userDecided ? `border-left: 6px solid ${decision.correct ? 'var(--green-ok)' : 'var(--red-bad)'};` : ''}">
@@ -2932,53 +3711,131 @@ function undercutCard(u, decision) {
         <h4 class="display" style="margin: 0; font-size: 18px;">Candidate #${u.id}</h4>
         <span style="font-family: 'JetBrains Mono'; font-size: 10px; color: var(--ink-faint);">unit ${u.unit} · ${u.bank} bank</span>
       </div>
-      <!-- Cross-section sketch (side view, looking downstream) -->
-      <svg viewBox="0 0 240 130" style="width: 100%; background: linear-gradient(180deg, #f0e8d6 0%, #d4c094 60%); border: 1px solid var(--ink-faint);">
+
+      <!-- Cross-section sketch (side view, looking downstream into the bank) -->
+      <svg viewBox="0 0 ${SVG_W} ${SVG_H}" style="width: 100%; background: linear-gradient(180deg, #f0e8d6 0%, #d4c094 50%, #b89c64 100%); border: 1.5px solid var(--ink); display: block;">
         <defs>
           <pattern id="bank-tex-${u.id}" width="6" height="6" patternUnits="userSpaceOnUse">
             <circle cx="2" cy="2" r="0.6" fill="#5a4f38" opacity="0.4"/>
             <circle cx="4" cy="4" r="0.5" fill="#5a4f38" opacity="0.3"/>
           </pattern>
+          <pattern id="grass-${u.id}" width="14" height="6" patternUnits="userSpaceOnUse">
+            <path d="M 2 6 L 2 1 M 6 6 L 6 2 M 10 6 L 10 0" stroke="#6b7d4a" stroke-width="0.7" opacity="0.7"/>
+          </pattern>
+          <linearGradient id="water-grad-${u.id}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#7ea0b3"/>
+            <stop offset="100%" stop-color="#1a2c38"/>
+          </linearGradient>
+          <linearGradient id="cavity-grad-${u.id}" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#0a1a24" stop-opacity="0.95"/>
+            <stop offset="100%" stop-color="#1a2c38" stop-opacity="0.85"/>
+          </linearGradient>
+          <radialGradient id="cavity-shadow-${u.id}" cx="0.85" cy="0.5" r="0.7">
+            <stop offset="0%" stop-color="#000" stop-opacity="0.5"/>
+            <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+          </radialGradient>
         </defs>
-        <!-- Bank earth (above the undercut and behind it) -->
-        <path d="M 0 0 L 240 0 L 240 ${waterY} L ${undercutBackX} ${waterY} L ${undercutBackX} ${lipY} L ${bankLeft} ${lipY} L ${bankLeft} 0 Z"
-              fill="#a89070"/>
-        <path d="M 0 0 L 240 0 L 240 ${waterY} L ${undercutBackX} ${waterY} L ${undercutBackX} ${lipY} L ${bankLeft} ${lipY} L ${bankLeft} 0 Z"
-              fill="url(#bank-tex-${u.id})"/>
-        <!-- Bank below water surface (behind undercut back wall) -->
-        <rect x="${undercutBackX}" y="${waterY}" width="${240 - undercutBackX}" height="${130 - waterY}" fill="#876e4e"/>
-        <!-- Water (in the undercut + to the right) -->
-        <rect x="${bankLeft}" y="${waterY - 4}" width="${240 - bankLeft}" height="${130 - waterY + 4}" fill="url(#cs-water-grad)" opacity="0.9"/>
-        <!-- Re-overlay bank lip so water is "under" the overhang -->
-        <path d="M 0 0 L ${bankLeft} 0 L ${bankLeft} ${lipY} L ${undercutBackX} ${lipY} Q ${undercutBackX + 8} ${lipY + 4} ${undercutBackX} ${waterY - 2} L ${undercutBackX} ${130} L 0 ${130} Z"
-              fill="#a89070"/>
-        <!-- Water fill in the undercut cavity -->
-        <rect x="${bankLeft}" y="${lipY}" width="${depthPx}" height="${waterY - lipY}" fill="#4a6878" opacity="0.55"/>
-        <!-- Water surface -->
-        <line x1="${bankLeft}" y1="${waterY}" x2="240" y2="${waterY}" stroke="#fdfaf0" stroke-width="0.8" opacity="0.85" stroke-dasharray="2 2"/>
-        <!-- Undercut back wall outline -->
-        <line x1="${undercutBackX}" y1="${lipY}" x2="${undercutBackX}" y2="${waterY}" stroke="#5a4f38" stroke-width="1"/>
-        <line x1="${bankLeft}" y1="${lipY}" x2="${undercutBackX}" y2="${lipY}" stroke="#5a4f38" stroke-width="1"/>
 
-        <!-- Dimension: depth (horizontal arrow) -->
-        <g stroke="#b4471f" stroke-width="0.8" fill="#b4471f">
-          <line x1="${bankLeft}" y1="${(lipY + waterY)/2}" x2="${undercutBackX}" y2="${(lipY + waterY)/2}"/>
-          <polygon points="${bankLeft},${(lipY+waterY)/2} ${bankLeft+4},${(lipY+waterY)/2 - 2} ${bankLeft+4},${(lipY+waterY)/2 + 2}"/>
-          <polygon points="${undercutBackX},${(lipY+waterY)/2} ${undercutBackX-4},${(lipY+waterY)/2 - 2} ${undercutBackX-4},${(lipY+waterY)/2 + 2}"/>
-          <text x="${(bankLeft + undercutBackX)/2}" y="${(lipY + waterY)/2 - 4}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#b4471f" stroke="none">${u.depth_avg} cm</text>
+        <!-- Sky -->
+        <rect x="0" y="0" width="${SVG_W}" height="40" fill="#cbd9e0" opacity="0.4"/>
+
+        <!-- Land surface above the bank — grass tips for context -->
+        <rect x="0" y="34" width="${SVG_W}" height="6" fill="url(#grass-${u.id})"/>
+
+        <!-- Bank earth (the solid land mass) -->
+        <!-- Top of bank (40 down to lip), inside of cavity, back wall, and below cavity to bottom -->
+        <path d="M 0 40 L ${SVG_W} 40 L ${SVG_W} ${SVG_H} L 0 ${SVG_H} Z" fill="#a89070"/>
+        <path d="M 0 40 L ${SVG_W} 40 L ${SVG_W} ${SVG_H} L 0 ${SVG_H} Z" fill="url(#bank-tex-${u.id})"/>
+
+        <!-- Carve out the cavity (overlay water/empty) -->
+        <!-- The cavity is a rectangle from bankLeft to undercutBackX, from lipY to (waterY + small extension to bottom) -->
+        <!-- Carve out by drawing the cavity background -->
+        <rect x="${bankLeft}" y="${lipY}" width="${depthPx}" height="${SVG_H - lipY}"
+              fill="${u.fish_cover ? 'url(#cavity-grad-' + u.id + ')' : '#7a6240'}"/>
+
+        <!-- Cavity floor texture if dewatered (visible bed material) -->
+        ${!u.fish_cover ? `
+          <rect x="${bankLeft}" y="${cavityWaterY}" width="${depthPx}" height="${SVG_H - cavityWaterY}" fill="#876e4e"/>
+          <!-- A few "stranded" pebbles inside the dry cavity -->
+          <circle cx="${bankLeft + depthPx*0.3}" cy="${SVG_H - 18}" r="3" fill="#5a4f38"/>
+          <circle cx="${bankLeft + depthPx*0.55}" cy="${SVG_H - 14}" r="2.4" fill="#6b5a44"/>
+          <circle cx="${bankLeft + depthPx*0.75}" cy="${SVG_H - 16}" r="2.8" fill="#5a4f38"/>
+          <!-- Dry/exposed shading on cavity walls -->
+          <rect x="${bankLeft}" y="${lipY}" width="${depthPx}" height="${cavityWaterY - lipY}" fill="rgba(220, 170, 90, 0.18)"/>
+        ` : `
+          <!-- Cavity radial darkness for cover -->
+          <rect x="${bankLeft}" y="${lipY}" width="${depthPx}" height="${SVG_H - lipY}" fill="url(#cavity-shadow-${u.id})"/>
+        `}
+
+        <!-- Water — outside the cavity (right of undercutBackX, full depth) -->
+        <rect x="${undercutBackX}" y="${actualWaterY}" width="${SVG_W - undercutBackX}" height="${SVG_H - actualWaterY}"
+              fill="url(#water-grad-${u.id})" opacity="0.95"/>
+
+        <!-- Water inside the cavity (only if there's enough water to fill it) -->
+        ${u.fish_cover ? `
+          <rect x="${bankLeft}" y="${cavityWaterY}" width="${depthPx}" height="${SVG_H - cavityWaterY}"
+                fill="url(#water-grad-${u.id})" opacity="0.85"/>
+        ` : ''}
+
+        <!-- Bank lip outline (the overhang edge) — highlighted so it's obvious where the cave starts -->
+        <line x1="${bankLeft}" y1="${lipY}" x2="${undercutBackX}" y2="${lipY}"
+              stroke="#2a2418" stroke-width="1.5"/>
+        <!-- Back wall of cavity -->
+        <line x1="${undercutBackX}" y1="${lipY}" x2="${undercutBackX}" y2="${SVG_H}"
+              stroke="#2a2418" stroke-width="1.5"/>
+
+        <!-- Water surface line (outside the cavity) -->
+        <line x1="${undercutBackX}" y1="${actualWaterY}" x2="${SVG_W}" y2="${actualWaterY}"
+              stroke="#fdfaf0" stroke-width="0.9" stroke-dasharray="3 2" opacity="0.9"/>
+        <!-- Water surface line in cavity if filled -->
+        ${u.fish_cover ? `
+          <line x1="${bankLeft}" y1="${cavityWaterY}" x2="${undercutBackX}" y2="${cavityWaterY}"
+                stroke="#fdfaf0" stroke-width="0.7" stroke-dasharray="2 2" opacity="0.7"/>
+        ` : `
+          <!-- Show the dropped water surface as a low-flow indicator -->
+          <line x1="${bankLeft}" y1="${cavityWaterY}" x2="${undercutBackX}" y2="${cavityWaterY}"
+                stroke="#c46943" stroke-width="0.8" stroke-dasharray="2 2" opacity="0.85"/>
+          <text x="${bankLeft + depthPx/2}" y="${cavityWaterY - 3}" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#a83a2c">low-flow water level</text>
+        `}
+
+        <!-- FISH (or no-fish) inside the cavity -->
+        ${u.fish_cover ? renderFish(fishX, fishY, fishSize) : `
+          <!-- Show that there is no fish, by placing an "empty" indicator -->
+          <text x="${bankLeft + depthPx/2}" y="${(lipY + cavityWaterY) / 2 + 4}" text-anchor="middle"
+                font-family="Caveat" font-size="14" fill="#a83a2c" font-style="italic" opacity="0.75">no water,<tspan x="${bankLeft + depthPx/2}" dy="14">no fish</tspan></text>
+        `}
+
+        <!-- Status badge (top of card) — large and obvious -->
+        <g transform="translate(${SVG_W/2}, 14)">
+          <rect x="-78" y="-9" width="156" height="18" fill="${u.fish_cover ? '#4a7d3d' : '#a83a2c'}" rx="2"/>
+          <text x="0" y="3" text-anchor="middle" font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#fdfaf0" letter-spacing="0.08em">${coverBadge.txt}</text>
         </g>
+
+        <!-- Dimension: depth (horizontal arrow) - centered in cavity -->
+        <g stroke="#fdfaf0" stroke-width="0.9" fill="#fdfaf0">
+          <line x1="${bankLeft + 2}" y1="${(lipY + (cavityWaterY > lipY ? cavityWaterY : SVG_H))/2}" x2="${undercutBackX - 2}" y2="${(lipY + (cavityWaterY > lipY ? cavityWaterY : SVG_H))/2}"/>
+          <polygon points="${bankLeft + 2},${(lipY + (cavityWaterY > lipY ? cavityWaterY : SVG_H))/2} ${bankLeft + 8},${(lipY + (cavityWaterY > lipY ? cavityWaterY : SVG_H))/2 - 3} ${bankLeft + 8},${(lipY + (cavityWaterY > lipY ? cavityWaterY : SVG_H))/2 + 3}"/>
+          <polygon points="${undercutBackX - 2},${(lipY + (cavityWaterY > lipY ? cavityWaterY : SVG_H))/2} ${undercutBackX - 8},${(lipY + (cavityWaterY > lipY ? cavityWaterY : SVG_H))/2 - 3} ${undercutBackX - 8},${(lipY + (cavityWaterY > lipY ? cavityWaterY : SVG_H))/2 + 3}"/>
+          <rect x="${(bankLeft + undercutBackX)/2 - 18}" y="${(lipY + (cavityWaterY > lipY ? cavityWaterY : SVG_H))/2 - 8}" width="36" height="11" fill="#2a2418" stroke="#fdfaf0" stroke-width="0.6"/>
+          <text x="${(bankLeft + undercutBackX)/2}" y="${(lipY + (cavityWaterY > lipY ? cavityWaterY : SVG_H))/2 + 0}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#fdfaf0" stroke="none" font-weight="600">${u.depth_avg} cm</text>
+        </g>
+
         <!-- Dimension: ceiling (vertical arrow) -->
-        <g stroke="#2a2418" stroke-width="0.8" fill="#2a2418">
-          <line x1="14" y1="${lipY}" x2="14" y2="${waterY}"/>
-          <polygon points="14,${lipY} 12,${lipY+4} 16,${lipY+4}"/>
-          <polygon points="14,${waterY} 12,${waterY-4} 16,${waterY-4}"/>
-          <text x="2" y="${(lipY+waterY)/2 + 3}" font-family="JetBrains Mono" font-size="9" fill="#2a2418" stroke="none">${u.ceiling}m</text>
+        <g stroke="#2a2418" stroke-width="0.9" fill="#2a2418">
+          <line x1="20" y1="${lipY}" x2="20" y2="${waterY}"/>
+          <polygon points="20,${lipY} 17,${lipY+5} 23,${lipY+5}"/>
+          <polygon points="20,${waterY} 17,${waterY-5} 23,${waterY-5}"/>
+          <rect x="2" y="${(lipY+waterY)/2 - 7}" width="32" height="11" fill="#fdfaf0" stroke="#2a2418" stroke-width="0.6"/>
+          <text x="18" y="${(lipY+waterY)/2 + 1}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="#2a2418" stroke="none" font-weight="600">${u.ceiling} m</text>
         </g>
-        <!-- Length annotation -->
-        <text x="120" y="123" text-anchor="middle" font-family="Caveat" font-size="14" fill="#2a2418">length: ${u.length} m (along edge)</text>
-        <!-- Cover indicator -->
-        ${u.fish_cover ? `<text x="${bankLeft + depthPx/2}" y="${waterY + 16}" text-anchor="middle" font-size="14">🐟</text>` : ''}
+
+        <!-- Length annotation (bottom) -->
+        <text x="${SVG_W/2}" y="${SVG_H - 6}" text-anchor="middle" font-family="Caveat" font-size="14" fill="#fdfaf0">length along bank: ${u.length} m</text>
+
+        <!-- Status tint overlay — subtle wash to reinforce go/no-go -->
+        <rect x="0" y="0" width="${SVG_W}" height="${SVG_H}" fill="${coverBadge.tint}" pointer-events="none"/>
       </svg>
+
       <!-- Criteria checklist -->
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin: 12px 0;">
         ${reasons.map(r => `
@@ -3036,6 +3893,14 @@ function stageSummary() {
   const meanCsDepth = state.csMeasurements.length === 11
     ? (state.csMeasurements.reduce((a,b)=>a+b.bf_depth, 0)/11).toFixed(2)
     : '—';
+  // Wetted summary at the chosen cross-section transect (if completed)
+  let wettedW = '—', meanWetDepth = '—';
+  if (state.csMeasurements.length === 11) {
+    const profile = bedProfile(state.csTransect);
+    wettedW = ((profile.wetRight - profile.wetLeft) * profile.bfw).toFixed(2);
+    const wetOnly = state.csMeasurements.filter(m => m.w_depth > 0);
+    if (wetOnly.length) meanWetDepth = (wetOnly.reduce((a,b)=>a+b.w_depth,0)/wetOnly.length).toFixed(2);
+  }
   const cobblePicks = state.substratePicks.filter(p => p.embeddedness != null);
   const meanEmb = cobblePicks.length ? (cobblePicks.reduce((a,b)=>a+b.embeddedness,0)/cobblePicks.length).toFixed(1) : '—';
   const ucOK = state.undercutDecisions.filter(d => d.qualifies && d.correct).length;
@@ -3047,13 +3912,29 @@ function stageSummary() {
         Habitat assessment summary · ${formatToday()}
       </div>
       <h2 class="display" style="font-size: 44px; margin: 0; line-height: 1;">Big Fish Creek <span style="color: var(--rust);">03-A</span></h2>
-      <p style="font-style: italic; color: var(--ink-soft); margin: 6px 0 22px; font-size: 16px;">Five-stage habitat assessment, single observer, training run.</p>
+      <p style="font-style: italic; color: var(--ink-soft); margin: 6px 0 18px; font-size: 16px;">Five-stage habitat assessment, training run.</p>
+      <div style="display: flex; gap: 24px; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 22px; background: var(--paper-2); border-left: 3px solid var(--ink);">
+        <div>
+          <div style="font-family: 'JetBrains Mono'; font-size: 9px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink-faint);">Observer</div>
+          <div style="font-family: 'Newsreader', serif; font-size: 16px; font-weight: 500; color: var(--ink); margin-top: 2px;">${state.crewName ? state.crewName : '<span style="color: var(--ink-faint); font-style: italic;">(no name recorded)</span>'}</div>
+        </div>
+        <div>
+          <div style="font-family: 'JetBrains Mono'; font-size: 9px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink-faint);">Site</div>
+          <div style="font-family: 'JetBrains Mono'; font-size: 13px; color: var(--ink); margin-top: 2px;">Big Fish Creek 03-A</div>
+        </div>
+        <div>
+          <div style="font-family: 'JetBrains Mono'; font-size: 9px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink-faint);">Date</div>
+          <div style="font-family: 'JetBrains Mono'; font-size: 13px; color: var(--ink); margin-top: 2px;">${formatToday()}</div>
+        </div>
+      </div>
 
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 28px;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-bottom: 28px;">
         ${[
           ['Avg BFW', avgBfw + ' m', 'site layout'],
           ['Width category', (state.widthCategory ?? '—') + ' m', 'site layout'],
           ['Mean BF depth', meanCsDepth + ' m', 'cross sect.'],
+          ['Wetted width', wettedW + ' m', `cross sect. T${state.csTransect}`],
+          ['Mean wet depth', meanWetDepth + ' m', `cross sect. T${state.csTransect}`],
           ['Mean embedd.', meanEmb + '%', 'substrate'],
           ['Qual. undercuts', ucOK, 'undercut bks'],
         ].map(([label, val, sub]) => `
@@ -3319,6 +4200,56 @@ window.__toggleMute = () => {
   setMuted(!audioState.muted);
   // Re-render header to update button text
   if (!audioState.muted) sfx.toggle();
+};
+
+window.__editCrewName = () => {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position: fixed; inset: 0; background: rgba(40,30,10,0.7); z-index: 220; display: flex; align-items: center; justify-content: center; padding: 16px; animation: fadein 0.2s;';
+  overlay.innerHTML = `
+    <div class="panel" style="max-width: 460px; width: 100%; padding: 28px;">
+      <h3 class="display" style="margin: 0 0 6px; font-size: 24px;">${state.crewName ? 'Edit your name' : 'Add your name'}</h3>
+      <p style="margin: 0 0 18px; font-size: 13px; color: var(--ink-soft); line-height: 1.55;">
+        Your name appears on the field report at the end of the simulation, like a real survey crew log.
+      </p>
+      <input type="text" id="crew-name-input" maxlength="60" placeholder="e.g., M. Stocklin, USFS Crew 4"
+             value="${(state.crewName || '').replace(/"/g, '&quot;')}"
+             style="width: 100%; padding: 10px 14px; font-family: 'Newsreader', serif; font-size: 15px; border: 1.5px solid var(--ink); border-bottom: 2.5px solid var(--ink); background: var(--paper); color: var(--ink); margin-bottom: 18px;"/>
+      <div style="display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;">
+        ${state.crewName ? '<button class="btn crew-clear" type="button">Clear</button>' : ''}
+        <button class="btn crew-cancel" type="button">Cancel</button>
+        <button class="btn btn-primary crew-save" type="button">Save</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const input = overlay.querySelector('#crew-name-input');
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const save = () => {
+    const v = input.value.trim().slice(0, 60);
+    state.crewName = v;
+    try { localStorage.setItem('riffleRunCrewName', v); } catch (e) {}
+    sfx.success();
+    close();
+    render();
+  };
+  const onKey = (e) => {
+    if (e.key === 'Escape') close();
+    if (e.key === 'Enter') save();
+  };
+  document.addEventListener('keydown', onKey);
+  overlay.querySelector('.crew-cancel').addEventListener('click', () => { sfx.tick(); close(); });
+  overlay.querySelector('.crew-save').addEventListener('click', save);
+  const clearBtn = overlay.querySelector('.crew-clear');
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    state.crewName = '';
+    try { localStorage.removeItem('riffleRunCrewName'); } catch (e) {}
+    sfx.toggle();
+    close();
+    render();
+  });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  // Auto-focus only on desktop
+  if (window.matchMedia('(min-width: 901px)').matches) setTimeout(() => input.focus(), 50);
 };
 
 // =====================================================================
