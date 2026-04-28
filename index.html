@@ -27,6 +27,10 @@
   }
   *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
+  /* Suppress iOS tap-highlight flash on all interactive elements */
+  button, a, [onclick], input, select, textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
   html { -webkit-text-size-adjust: 100%; }
   body {
     font-family: 'Newsreader', 'Iowan Old Style', 'Palatino', 'Book Antiqua', Georgia, serif;
@@ -96,15 +100,27 @@
     border: 1.5px solid var(--ink);
     background: var(--paper);
     color: var(--ink);
-    transition: all 0.15s;
     box-shadow: 3px 3px 0 var(--ink);
+    /* Disable iOS blue tap-highlight flash */
+    -webkit-tap-highlight-color: transparent;
+    /* No transitions/animations on tap by default — only hover-capable devices get them */
+    transition: none;
+    /* Avoid double-tap to zoom on iOS */
+    touch-action: manipulation;
+  }
+  /* Touch-only: enforce 44px minimum tap target (Apple Human Interface Guidelines) */
+  @media (hover: none) {
+    .btn { min-height: 44px; min-width: 44px; padding: 12px 20px; }
   }
   .btn:hover { } /* placeholder; real hover scoped below */
   @media (hover: hover) {
+    .btn { transition: box-shadow 0.15s, transform 0.15s; }
     .btn:hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+    .btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
   }
-  .btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
   .btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: 1px 1px 0 var(--ink); }
+  .btn:focus { outline: none; }
+  .btn:focus-visible { outline: 2px solid var(--rust); outline-offset: 2px; }
   .btn-primary { background: var(--rust); color: var(--paper); border-color: var(--rust); box-shadow: 3px 3px 0 var(--ink); }
   @media (hover: hover) {
     .btn-primary:hover:not(:disabled) { background: var(--rust-soft); }
@@ -181,76 +197,81 @@
   }
   .ripple { animation: ripple 0.7s ease-out forwards; }
 
-  /* Title water animation: streaks drift left → right (downstream) */
-  @keyframes title-water-drift {
-    0%   { transform: translateX(0); }
-    100% { transform: translateX(40px); }
+  /* ===== Boulder-style title ===== */
+  /* Heavy condensed block letters with 3D extrude, faceted chips, and cracks. */
+  .boulder-title {
+    font-family: 'Anton', 'Bebas Neue', 'Impact', 'Arial Black', sans-serif;
+    font-weight: 400; /* Anton is already heavy */
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    line-height: 0.92;
+    margin: 0;
+    /* Front-face stone color: cool blue-gray, like wet basalt highlight */
+    color: #c9d6dd;
+    /* 3D extrude: stack of darker shadows offset down-right + final dark drop */
+    text-shadow:
+      1px 1px 0 #6b7e88,
+      2px 2px 0 #5a6e78,
+      3px 3px 0 #4a5e68,
+      4px 4px 0 #3a4d56,
+      5px 5px 0 #2c3d46,
+      6px 6px 0 #1f2c34,
+      7px 7px 0 #14202a,
+      8px 9px 8px rgba(0, 0, 0, 0.45);
   }
-  @keyframes title-foam-bob {
-    0%, 100% { transform: translateY(0); opacity: 0.9; }
-    50% { transform: translateY(-1.5px); opacity: 1; }
+  .boulder-title .boulder-rust {
+    color: #e8a07c;
+    text-shadow:
+      1px 1px 0 #b46d4a,
+      2px 2px 0 #9c5638,
+      3px 3px 0 #834328,
+      4px 4px 0 #6a331c,
+      5px 5px 0 #532614,
+      6px 6px 0 #3c1a0c,
+      7px 7px 0 #2a1108,
+      8px 9px 8px rgba(0, 0, 0, 0.45);
   }
-  @keyframes title-spray {
-    0%   { opacity: 0; transform: translate(0, 0) scale(0.6); }
-    30%  { opacity: 0.8; }
-    100% { opacity: 0; transform: translate(0, -8px) scale(1.2); }
+  /* Soft texture overlay (cracks/speckles) painted into front face via background */
+  .boulder-title .boulder-word {
+    position: relative;
+    display: inline-block;
+    padding: 0 0.05em;
   }
-  .title-flow-layer { animation: title-water-drift 2.4s linear infinite; }
-  .title-foam { animation: title-foam-bob 1.8s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
-  .title-spray-1 { animation: title-spray 2.1s ease-out infinite; }
-  .title-spray-2 { animation: title-spray 2.4s ease-out 0.6s infinite; }
-  .title-spray-3 { animation: title-spray 1.9s ease-out 1.1s infinite; }
-
-  /* Rocky title text — letters look like wet boulders */
-  .title-rocky { position: relative; }
-  .rocky-text {
-    /* Stone-like gradient fill clipped to text shape */
+  /* Use a subtle radial-gradient noise on the front face only,
+     by layering a transparent background-clip:text element on top. */
+  .boulder-title .boulder-word::before {
+    content: attr(data-word);
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    /* Mineral grain — dark speckles randomly distributed */
     background:
-      /* Top wet sheen — bright cap on each letter */
-      linear-gradient(180deg,
-        rgba(253,250,240,0.55) 0%,
-        rgba(253,250,240,0.18) 22%,
-        transparent 38%),
-      /* Subtle speckle texture using radial gradients */
-      radial-gradient(circle at 22% 35%, rgba(253,250,240,0.18) 0px, transparent 2px),
-      radial-gradient(circle at 70% 60%, rgba(0,0,0,0.35) 0px, transparent 2px),
-      radial-gradient(circle at 45% 80%, rgba(253,250,240,0.10) 0px, transparent 2px),
-      /* Main stone color — warm browns deepening to dark */
-      linear-gradient(160deg, #9b876a 0%, #6b5a44 35%, #3a3225 70%, #2a2418 100%);
-    background-size: 100% 100%, 14px 14px, 18px 18px, 11px 11px, 100% 100%;
+      radial-gradient(circle at 15% 30%, rgba(20,30,40,0.55) 0px, transparent 1.5px),
+      radial-gradient(circle at 38% 55%, rgba(20,30,40,0.45) 0px, transparent 1.8px),
+      radial-gradient(circle at 62% 25%, rgba(20,30,40,0.50) 0px, transparent 1.6px),
+      radial-gradient(circle at 82% 65%, rgba(20,30,40,0.45) 0px, transparent 1.4px),
+      radial-gradient(circle at 25% 75%, rgba(20,30,40,0.40) 0px, transparent 1.5px),
+      radial-gradient(circle at 55% 85%, rgba(20,30,40,0.40) 0px, transparent 1.3px),
+      /* Cool highlights */
+      radial-gradient(circle at 30% 20%, rgba(255,255,255,0.18) 0px, transparent 2px),
+      radial-gradient(circle at 70% 50%, rgba(255,255,255,0.12) 0px, transparent 2px);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    /* Stone bevel via stacked text-shadows */
-    text-shadow:
-      0 1px 0 rgba(0,0,0,0.55),       /* base shadow under letters */
-      0 2px 1px rgba(0,0,0,0.30),     /* deeper drop */
-      -1px -1px 0 rgba(253,250,240,0.18),  /* highlight upper-left edge */
-      1px 1px 2px rgba(74,104,120,0.45);   /* wet halo on lower-right */
-    /* Subtle paint stroke to firm the silhouette */
-    -webkit-text-stroke: 0.5px rgba(20,15,10,0.45);
   }
-  /* "Run" gets a warmer, more rust-iron coloration */
-  .rocky-text-rust {
+  /* Crack overlay: faint diagonal dark lines across the word, masked to text */
+  .boulder-title .boulder-word::after {
+    content: attr(data-word);
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
     background:
-      linear-gradient(180deg,
-        rgba(253,250,240,0.55) 0%,
-        rgba(253,250,240,0.18) 22%,
-        transparent 38%),
-      radial-gradient(circle at 22% 35%, rgba(253,250,240,0.18) 0px, transparent 2px),
-      radial-gradient(circle at 70% 60%, rgba(0,0,0,0.40) 0px, transparent 2px),
-      radial-gradient(circle at 45% 80%, rgba(253,250,240,0.10) 0px, transparent 2px),
-      linear-gradient(160deg, #c46943 0%, #934a25 40%, #4a2818 80%, #2a1a10 100%);
-    background-size: 100% 100%, 14px 14px, 18px 18px, 11px 11px, 100% 100%;
+      linear-gradient(110deg, transparent 30%, rgba(20,30,40,0.55) 30.5%, rgba(20,30,40,0.55) 31%, transparent 31.5%),
+      linear-gradient(75deg, transparent 60%, rgba(20,30,40,0.45) 60.4%, rgba(20,30,40,0.45) 60.8%, transparent 61.2%),
+      linear-gradient(95deg, transparent 78%, rgba(20,30,40,0.40) 78.3%, rgba(20,30,40,0.40) 78.6%, transparent 79%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    text-shadow:
-      0 1px 0 rgba(0,0,0,0.55),
-      0 2px 1px rgba(0,0,0,0.30),
-      -1px -1px 0 rgba(253,250,240,0.18),
-      1px 1px 2px rgba(74,104,120,0.45);
-    -webkit-text-stroke: 0.5px rgba(20,15,10,0.45);
   }
 
   /* Tiny water animations layered on top of the title */
@@ -270,7 +291,6 @@
   .rocky-drip-2 { animation: rocky-drip 2.4s ease-in 1.2s infinite; }
 
   @media (prefers-reduced-motion: reduce) {
-    .title-flow-layer, .title-foam, .title-spray-1, .title-spray-2, .title-spray-3,
     .rocky-flow-1, .rocky-flow-2, .rocky-flow-3, .rocky-drip-1, .rocky-drip-2 { animation: none; }
   }
 
@@ -376,7 +396,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Newsreader:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Caveat:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Newsreader:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Caveat:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&family=Anton&display=swap" rel="stylesheet">
 
 <div id="app"></div>
 <div class="toast-stack" id="toasts"></div>
@@ -1029,30 +1049,9 @@ function renderHeader() {
   h.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap;">
       <div style="flex: 1; min-width: 280px;">
-        <div style="position: relative; display: inline-block;">
-          <h1 class="display title-rocky" style="font-size: clamp(40px, 7vw, 88px); margin: 0; line-height: 0.9; font-weight: 700; letter-spacing: -0.01em;">
-            <span class="rocky-text">Riffle</span>
-            <span class="rocky-text rocky-text-rust">Run</span>
-            <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.28em; font-weight: 400; color: var(--ink-faint); letter-spacing: 0.05em; vertical-align: 0.9em; margin-left: -0.15em;">1.0</span>
-          </h1>
-          <!-- Water FX: small flow streaks above the letters and drips below -->
-          <svg style="position: absolute; left: 0; right: 0; top: 0; bottom: -10px; width: 100%; height: calc(100% + 14px); pointer-events: none; overflow: visible;" preserveAspectRatio="none">
-            <!-- Flow streaks washing across the top of the letters -->
-            <g>
-              <path class="rocky-flow-1" d="M 0 6 q 8 -2 16 0" stroke="#fdfaf0" stroke-width="1.2" fill="none" opacity="0.9"/>
-              <path class="rocky-flow-2" d="M 0 14 q 10 -2 20 0" stroke="#fdfaf0" stroke-width="0.9" fill="none" opacity="0.7"/>
-              <path class="rocky-flow-3" d="M 0 22 q 6 -1.5 12 0" stroke="#fdfaf0" stroke-width="1" fill="none" opacity="0.85"/>
-            </g>
-            <!-- Foam dabs at upstream face of a couple letters -->
-            <ellipse cx="6%"  cy="46%" rx="6" ry="1.6" fill="#fdfaf0" opacity="0.75"/>
-            <ellipse cx="32%" cy="50%" rx="5" ry="1.4" fill="#fdfaf0" opacity="0.7"/>
-            <ellipse cx="58%" cy="46%" rx="6" ry="1.6" fill="#fdfaf0" opacity="0.75"/>
-            <!-- Drips off the bottom of letters -->
-            <ellipse class="rocky-drip-1" cx="14%" cy="92%" rx="1.4" ry="2.6" fill="#7ea0b3" opacity="0.85"/>
-            <ellipse class="rocky-drip-2" cx="42%" cy="92%" rx="1.2" ry="2.4" fill="#7ea0b3" opacity="0.85"/>
-            <ellipse class="rocky-drip-1" cx="68%" cy="92%" rx="1.4" ry="2.6" fill="#7ea0b3" opacity="0.85"/>
-          </svg>
-        </div>
+        <h1 class="display" style="font-size: clamp(40px, 7vw, 84px); margin: 0; line-height: 0.95; font-weight: 600; letter-spacing: -0.01em; color: var(--ink);">
+          Riffle <span style="color: var(--rust);">Run</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 0.22em; font-weight: 400; color: var(--ink-faint); letter-spacing: 0.1em; vertical-align: 1.4em; margin-left: 0.3em;">v 1.0</span>
+        </h1>
         <p style="font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 18px; color: var(--ink-soft); margin: 10px 0 0; max-width: 640px;">
           A field-skills trainer for stream habitat assessment — site layout, cross sections, channel units, substrate, and undercut banks.
         </p>
@@ -1098,9 +1097,18 @@ function formatToday() {
 // =====================================================================
 // STAGE: INTRO
 // =====================================================================
+// Track the last stage rendered, so we only animate the fadein when the user
+// actually navigates to a new stage — not on every in-stage re-render
+// (e.g. taking a measurement, placing a transect). Otherwise the page
+// "flashes" on every click because the whole stage opacity-fades from 0.
+let _lastRenderedStage = null;
+
 function renderStage() {
   const c = document.createElement('div');
-  c.className = 'fadein';
+  if (state.stage !== _lastRenderedStage) {
+    c.className = 'fadein';
+    _lastRenderedStage = state.stage;
+  }
   switch (state.stage) {
     case 'intro': c.appendChild(stageIntro()); break;
     case 'layout': c.appendChild(stageLayout()); break;
@@ -3022,7 +3030,8 @@ const SIZE_CLASSES = [
 
 function stageSubstrate() {
   const el = document.createElement('div');
-  el.className = 'fadein';
+  // fadein is applied by renderStage() only when the stage actually changes,
+  // so we don't apply it here (which would flash on every in-stage re-render).
 
   // Compute riffles in user's classification
   const segments = [];
@@ -4191,9 +4200,11 @@ window.__openTerms = () => {
 
 function goStage(name) {
   state.stage = name;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-  sfx.tick();
   render();
+  // Instant scroll instead of smooth — avoids competing with iOS touch handling
+  // and the "page moving" sensation when a tap navigates away.
+  window.scrollTo(0, 0);
+  sfx.tick();
 }
 window.goStage = goStage;
 window.__toggleMute = () => {
