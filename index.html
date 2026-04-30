@@ -769,19 +769,154 @@ const state = {
 // ---------- THE STREAM (synthetic but plausible) ----------
 // We model a stream reach with a centerline that meanders, and bank lines.
 // Lengths are in real meters. The "true" bankfull width varies along the reach.
-const STREAM = (() => {
-  // 110m reach, varying width 5-9m, sinuous
-  const len = 110;
+// =====================================================================
+// STREAM / SITE GENERATION
+// Five distinct site presets representing common stream types a field tech
+// might encounter. Each call to generateSite() rolls a new random variant
+// (or a specifically named one), so students can practice on different rivers.
+// =====================================================================
+const SITE_PRESETS = [
+  {
+    id: 'forested-headwater',
+    name: 'Forested Headwater',
+    description: 'Small, narrow stream typical of Pacific Northwest forested headwaters. Tight meanders, modest width.',
+    len: 90,
+    bfwBase: 5.5,
+    bfwVar: 1.0,
+    latAmp1: 4.5, latFreq1: 0.08,
+    latAmp2: 1.8, latFreq2: 0.22,
+  },
+  {
+    id: 'fish-bearing-creek',
+    name: 'Fish-Bearing Creek',
+    description: 'Medium meandering creek — the most common type of habitat-assessment site.',
+    len: 110,
+    bfwBase: 7.5,
+    bfwVar: 1.5,
+    latAmp1: 6.0, latFreq1: 0.06,
+    latAmp2: 2.5, latFreq2: 0.16,
+  },
+  {
+    id: 'valley-river',
+    name: 'Valley River',
+    description: 'Wide, lower-gradient river with broad sweeping bends — characteristic of lowland valley reaches.',
+    len: 140,
+    bfwBase: 13.0,
+    bfwVar: 2.5,
+    latAmp1: 8.0, latFreq1: 0.04,
+    latAmp2: 2.5, latFreq2: 0.11,
+  },
+  {
+    id: 'constrained-channel',
+    name: 'Constrained Channel',
+    description: 'Bedrock- or boulder-controlled stream with low sinuosity and consistent width — minimal meandering.',
+    len: 100,
+    bfwBase: 6.0,
+    bfwVar: 0.7,
+    latAmp1: 2.0, latFreq1: 0.06,
+    latAmp2: 1.0, latFreq2: 0.18,
+  },
+  {
+    id: 'meadow-stream',
+    name: 'Meadow Stream',
+    description: 'Highly sinuous alluvial meadow stream with tight repeating meanders and gentle gradient.',
+    len: 100,
+    bfwBase: 6.5,
+    bfwVar: 1.2,
+    latAmp1: 7.5, latFreq1: 0.10,
+    latAmp2: 3.0, latFreq2: 0.24,
+  },
+];
+
+// Site codes pool — short identifiers like real survey sites
+const SITE_CODE_POOL = [
+  'Big Fish Creek',
+  'Coyote Creek',
+  'Whisper Creek',
+  'Stoneford Run',
+  'Black Bear Creek',
+  'Salmon Reach',
+  'Cottonwood Creek',
+  'Marten Run',
+  'Birch Hollow Creek',
+  'Steelhead Run',
+  'Willow Branch',
+  'Otter Creek',
+  'Pine Ridge Creek',
+  'Trout Run',
+];
+
+// Mulberry32 — a simple deterministic PRNG seeded by integer
+function mulberry32(seed) {
+  return function() {
+    let t = seed += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// Generate a stream from a preset + random seed.
+// Adds noise on top of the preset's base parameters so each call within
+// a preset produces a slightly different specific reach.
+function generateSite(preset, seed) {
+  const rng = mulberry32(seed);
+  // Per-roll variance so the same preset never produces an identical reach
+  const phaseLat1 = rng() * Math.PI * 2;
+  const phaseLat2 = rng() * Math.PI * 2;
+  const phaseBfw1 = rng() * Math.PI * 2;
+  const phaseBfw2 = rng() * Math.PI * 2;
+  // Slight per-roll wobble in amplitudes (±15%)
+  const ampJitter1 = 0.85 + rng() * 0.30;
+  const ampJitter2 = 0.85 + rng() * 0.30;
+  const widthJitter = 0.85 + rng() * 0.30;
+
   const samples = [];
-  for (let s = 0; s <= len; s += 0.5) {
-    // centerline lateral offset: sum of two sines
-    const lat = 6 * Math.sin(s * 0.06) + 2.5 * Math.sin(s * 0.16 + 1.2);
-    // bankfull width (varies along channel realistically)
-    const bfw = 7.0 + 1.5 * Math.sin(s * 0.05 + 0.4) + 0.8 * Math.sin(s * 0.18);
+  for (let s = 0; s <= preset.len; s += 0.5) {
+    const lat =
+      preset.latAmp1 * ampJitter1 * Math.sin(s * preset.latFreq1 + phaseLat1) +
+      preset.latAmp2 * ampJitter2 * Math.sin(s * preset.latFreq2 + phaseLat2);
+    // Bankfull width with low-frequency variation
+    const bfw = Math.max(2.5,
+      preset.bfwBase +
+      preset.bfwVar * widthJitter * Math.sin(s * 0.05 + phaseBfw1) +
+      0.5 * Math.sin(s * 0.18 + phaseBfw2)
+    );
     samples.push({ s, lat, bfw });
   }
-  return { len, samples };
-})();
+
+  // Site code = creek name + random number suffix + section letter (real-survey style)
+  const creekName = SITE_CODE_POOL[Math.floor(rng() * SITE_CODE_POOL.length)];
+  const sectionNum = String(Math.floor(rng() * 9) + 1).padStart(2, '0');
+  const sectionLetter = ['A', 'B', 'C', 'D'][Math.floor(rng() * 4)];
+  const siteCode = `${creekName} ${sectionNum}-${sectionLetter}`;
+
+  // Random plausible UTM coordinates (PNW-ish)
+  const utmZone = '10T';
+  const utmE = (540000 + Math.floor(rng() * 8000)).toString().padStart(6, '0');
+  const utmN = (4760000 + Math.floor(rng() * 12000)).toString().padStart(7, '0');
+
+  return {
+    presetId: preset.id,
+    presetName: preset.name,
+    presetDescription: preset.description,
+    seed,
+    siteCode,
+    utm: `${utmZone} ${utmE} E / ${utmN} N`,
+    len: preset.len,
+    samples,
+  };
+}
+
+// Pick a random preset and seed
+function rollNewSite() {
+  const preset = SITE_PRESETS[Math.floor(Math.random() * SITE_PRESETS.length)];
+  const seed = Math.floor(Math.random() * 0x7FFFFFFF);
+  return generateSite(preset, seed);
+}
+
+// Live STREAM — re-assigned via rollNewSite() at app start and on user request
+let STREAM = rollNewSite();
 
 // True average bankfull at the bottom of site (first 5 widths spaced equally)
 function trueBankfullAt(s) {
@@ -1126,9 +1261,18 @@ function stageIntro() {
   el.innerHTML = `
     <div class="panel" style="padding: clamp(20px, 3vw, 36px); margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 32px; align-items: center;">
       <div>
-        <h2 class="display" style="font-size: clamp(28px, 5vw, 38px); margin: 0 0 16px; line-height: 1.1;">Welcome to <span style="color: var(--rust);">Big Fish Creek</span>.</h2>
+        <h2 class="display" style="font-size: clamp(28px, 5vw, 38px); margin: 0 0 8px; line-height: 1.1;">Welcome to <span style="color: var(--rust);">${STREAM.siteCode}</span>.</h2>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px;">
+          <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(180,71,31,0.10); border: 1px solid var(--rust); color: var(--rust); font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;">
+            ◆ ${STREAM.presetName}
+          </span>
+          <button onclick="window.__rerollSite()" type="button" style="padding: 4px 10px; background: transparent; border: 1px dashed var(--ink-faint); color: var(--ink-soft); font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; -webkit-tap-highlight-color: transparent;">
+            ↻ Different stream
+          </button>
+        </div>
+        <p style="font-size: 14px; line-height: 1.55; color: var(--ink-soft); font-style: italic; margin: 0 0 14px;">${STREAM.presetDescription}</p>
         <p style="font-size: 16px; line-height: 1.65; color: var(--ink-soft); margin-bottom: 16px;">
-          You're a field tech assigned to assess a 110-meter stretch of stream for fish habitat.
+          You're a field tech assigned to assess a ${STREAM.len}-meter stretch of stream for fish habitat.
           Across five stages, you'll learn the methodology biologists use across the Pacific Northwest:
           how to lay out a site, take cross sections, identify channel units, sample substrate, and qualify undercut banks.
         </p>
@@ -1441,8 +1585,21 @@ function layoutCanvas() {
         <line x1="${10 * (W-120)/STREAM.len}" y1="-3" x2="${10 * (W-120)/STREAM.len}" y2="3" stroke="#2a2418" stroke-width="1.5"/>
         <text x="${5 * (W-120)/STREAM.len}" y="-6" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="#5a4f38">10 m</text>
       </g>
-      <!-- Compass / flow -->
-      <text x="${W-30}" y="36" text-anchor="end" font-family="Caveat" font-size="26" fill="#b4471f">flow →</text>
+      <!-- Work Flow (top): direction the surveyor walks the reach (upstream) -->
+      <g transform="translate(${W/2}, 30)">
+        <text x="0" y="0" text-anchor="middle" font-family="Caveat" font-size="22" fill="#b4471f">Work Flow</text>
+        <line x1="-70" y1="14" x2="70" y2="14" stroke="#b4471f" stroke-width="2" stroke-linecap="round"/>
+        <polygon points="70,14 60,9 60,19" fill="#b4471f"/>
+        <text x="-90" y="18" text-anchor="end" font-family="JetBrains Mono" font-size="10" fill="#b4471f" letter-spacing="0.1em">BOS</text>
+        <text x="90"  y="18" text-anchor="start" font-family="JetBrains Mono" font-size="10" fill="#b4471f" letter-spacing="0.1em">TOS</text>
+      </g>
+
+      <!-- River Flow (bottom): natural direction of water (downstream) -->
+      <g transform="translate(${W/2}, ${H - 30})">
+        <line x1="70" y1="-14" x2="-70" y2="-14" stroke="#4a6878" stroke-width="2" stroke-linecap="round"/>
+        <polygon points="-70,-14 -60,-19 -60,-9" fill="#4a6878"/>
+        <text x="0" y="0" text-anchor="middle" font-family="Caveat" font-size="22" fill="#4a6878">River Flow</text>
+      </g>
     </svg>
     <div id="layout-help" style="margin-top: 14px; min-height: 60px;"></div>
   `;
@@ -1875,8 +2032,8 @@ function layoutSidebar() {
       <div>
         <h4 class="display" style="margin: 0 0 14px; font-size: 18px;">Field notes</h4>
         <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-soft); line-height: 1.6;">
-          <div><b>SITE:</b> Big Fish Creek 03-A</div>
-          <div><b>BOS UTM:</b> 10T 542819 E / 4768214 N</div>
+          <div><b>SITE:</b> ${STREAM.siteCode}</div>
+          <div><b>BOS UTM:</b> ${STREAM.utm}</div>
           <div><b>DATE:</b> ${formatToday()}</div>
           <div><b>OBSERVER:</b> ${state.crewName || '—'}</div>
         </div>
@@ -2750,9 +2907,22 @@ function stageUnits() {
       ${boundaryMarks}
 
       <!-- BOS / TOS labels -->
-      <text x="${sToX(0)}" y="${H - 10}" text-anchor="start" font-family="JetBrains Mono" font-size="11" font-weight="700">BOS →</text>
-      <text x="${sToX(1)}" y="${H - 10}" text-anchor="end" font-family="JetBrains Mono" font-size="11" font-weight="700">→ TOS</text>
-      <text x="${W/2}" y="22" text-anchor="middle" font-family="Caveat" font-size="22" fill="#b4471f">flow direction →</text>
+      <text x="${sToX(0)}" y="${H - 10}" text-anchor="start" font-family="JetBrains Mono" font-size="11" font-weight="700">BOS</text>
+      <text x="${sToX(1)}" y="${H - 10}" text-anchor="end" font-family="JetBrains Mono" font-size="11" font-weight="700">TOS</text>
+
+      <!-- Work Flow (top): direction the surveyor walks -->
+      <g transform="translate(${W/2}, 16)">
+        <text x="0" y="0" text-anchor="middle" font-family="Caveat" font-size="20" fill="#b4471f">Work Flow</text>
+        <line x1="-58" y1="10" x2="58" y2="10" stroke="#b4471f" stroke-width="1.6" stroke-linecap="round"/>
+        <polygon points="58,10 49,6 49,14" fill="#b4471f"/>
+      </g>
+
+      <!-- River Flow (bottom): natural direction of water (opposite the survey direction) -->
+      <g transform="translate(${W/2}, ${H - 30})">
+        <line x1="58" y1="0" x2="-58" y2="0" stroke="#4a6878" stroke-width="1.6" stroke-linecap="round"/>
+        <polygon points="-58,0 -49,-4 -49,4" fill="#4a6878"/>
+        <text x="0" y="14" text-anchor="middle" font-family="Caveat" font-size="20" fill="#4a6878">River Flow</text>
+      </g>
     </svg>
     <div style="margin-top: 14px; display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start;">
       <div style="flex: 2; min-width: 280px;">
@@ -3920,8 +4090,13 @@ function stageSummary() {
       <div style="font-family: 'JetBrains Mono'; font-size: 10px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink-faint); margin-bottom: 6px;">
         Habitat assessment summary · ${formatToday()}
       </div>
-      <h2 class="display" style="font-size: 44px; margin: 0; line-height: 1;">Big Fish Creek <span style="color: var(--rust);">03-A</span></h2>
-      <p style="font-style: italic; color: var(--ink-soft); margin: 6px 0 18px; font-size: 16px;">Five-stage habitat assessment, training run.</p>
+      <h2 class="display" style="font-size: clamp(30px, 5vw, 44px); margin: 0; line-height: 1;">${(() => {
+        // Split "Creek Name 03-A" into "Creek Name" + "03-A" for rust accent on suffix
+        const m = STREAM.siteCode.match(/^(.+?)\s+(\d+-[A-Z])$/);
+        if (m) return `${m[1]} <span style="color: var(--rust);">${m[2]}</span>`;
+        return STREAM.siteCode;
+      })()}</h2>
+      <p style="font-style: italic; color: var(--ink-soft); margin: 6px 0 18px; font-size: 16px;">${STREAM.presetName} · five-stage habitat assessment, training run.</p>
       <div style="display: flex; gap: 24px; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 22px; background: var(--paper-2); border-left: 3px solid var(--ink);">
         <div>
           <div style="font-family: 'JetBrains Mono'; font-size: 9px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink-faint);">Observer</div>
@@ -3929,7 +4104,7 @@ function stageSummary() {
         </div>
         <div>
           <div style="font-family: 'JetBrains Mono'; font-size: 9px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink-faint);">Site</div>
-          <div style="font-family: 'JetBrains Mono'; font-size: 13px; color: var(--ink); margin-top: 2px;">Big Fish Creek 03-A</div>
+          <div style="font-family: 'JetBrains Mono'; font-size: 13px; color: var(--ink); margin-top: 2px;">${STREAM.siteCode}</div>
         </div>
         <div>
           <div style="font-family: 'JetBrains Mono'; font-size: 9px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink-faint);">Date</div>
@@ -4018,6 +4193,8 @@ function stageSummary() {
 // RESTART (available from anywhere)
 // =====================================================================
 function resetSimState() {
+  // Roll a new site so each restart gives a fresh river
+  STREAM = rollNewSite();
   Object.assign(state, {
     stage: 'intro',
     bankfullMeasurements: [],
@@ -4159,6 +4336,37 @@ function recordTermsAgreement() {
 
 window.__beginFieldwork = () => {
   goStage('layout');
+};
+
+// Generate a fresh stream/site (random preset + random seed) and reset
+// any progress that depends on the old site geometry. Used by the
+// "Different stream" button on the intro screen.
+window.__rerollSite = () => {
+  STREAM = rollNewSite();
+  // Wipe stage progress because measurements were tied to the old reach
+  state.bankfullMeasurements = [];
+  state.widthCategory = null;
+  state.transectsPlaced = 0;
+  state.transectsLocked = false;
+  state.csTransect = 1;
+  state.csMeasurements = [];
+  state.csComplete = false;
+  state.unitBoundaries = [0, 1.0];
+  state.unitClassifications = [];
+  state.unitsComplete = false;
+  state.substrateCrossSections = [];
+  state.substratePicks = [];
+  state.substrateComplete = false;
+  state.undercutDecisions = [];
+  state.undercutComplete = false;
+  state.score = { layout: 0, crosssection: 0, units: 0, substrate: 0, undercut: 0 };
+  state.scoreNotes = { layout: [], crosssection: [], units: [], substrate: [], undercut: [] };
+  state._samplingStarted = false;
+  state._substrateFinalSoundPlayed = false;
+  state.unitsWrong = null;
+  sfx.success();
+  toast(`<b>New site generated:</b> ${STREAM.siteCode} · ${STREAM.presetName}`, 'ok', 3500);
+  render();
 };
 
 window.__openTerms = () => {
